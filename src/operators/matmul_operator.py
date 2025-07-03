@@ -170,6 +170,21 @@ class MatMulOperator(BaseOperator):
         # Set reference implementation
         self.set_reference_implementation("pytorch_mm")
         
+        # Add CPU/NumPy implementations for accuracy comparison
+        self.register_implementation(
+            "numpy_cpu",
+            self._numpy_cpu,
+            "NumPy CPU",
+            "NumPy matrix multiplication on CPU"
+        )
+        
+        self.register_implementation(
+            "pytorch_cpu",
+            self._pytorch_cpu,
+            "PyTorch CPU",
+            "PyTorch matrix multiplication on CPU"
+        )
+        
     def _pytorch_mm(self, inputs: List[torch.Tensor], params: Dict[str, Any]) -> torch.Tensor:
         """PyTorch torch.mm implementation"""
         if len(inputs[0].shape) == 2:
@@ -237,3 +252,18 @@ class MatMulOperator(BaseOperator):
             return torch.as_tensor(result_cp, device='cuda')
         except:
             return None
+        
+    def _numpy_cpu(self, inputs: List[torch.Tensor], params: Dict[str, Any]) -> torch.Tensor:
+        """NumPy CPU implementation"""
+        try:
+            import numpy as np
+            a_np = inputs[0].cpu().numpy()
+            b_np = inputs[1].cpu().numpy()
+            result_np = np.dot(a_np, b_np)
+            return torch.as_tensor(result_np, device='cuda')
+        except:
+            return None
+        
+    def _pytorch_cpu(self, inputs: List[torch.Tensor], params: Dict[str, Any]) -> torch.Tensor:
+        """PyTorch CPU implementation"""
+        return torch.matmul(inputs[0].cpu(), inputs[1].cpu()).cuda()
