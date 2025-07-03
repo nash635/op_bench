@@ -48,6 +48,9 @@ python run_comparator.py --operator relu --test-cases small_tensor
 
 # Generate plots and save to a specific directory
 python run_comparator.py --operator matmul --test-cases small_square --output-dir my_results --plot
+
+# Compare accuracy differences between implementations (using PyTorch CPU as reference)
+python run_comparator.py --operator matmul --test-cases small_square --output-dir result --plot --output-diff
 ```
 
 ## Supported Operators
@@ -89,10 +92,17 @@ python run_comparator.py --operator matmul --test-cases small_square --output-di
 - Comparative visualizations
 - JSON and Markdown reporting
 
+### Accuracy Analysis
+- Precision difference comparison between implementations
+- PyTorch CPU implementation as reference baseline
+- Statistical error metrics (MSE, MAE, relative error)
+- Relative error and absolute error bar charts
+
 ## Output Examples
 
 The framework generates:
 - **Performance charts** (PNG): Execution time and GFLOPS comparisons
+- **Accuracy charts** (PNG): Precision difference visualizations (when using --output-diff)
 - **Detailed reports** (Markdown): Comprehensive analysis with recommendations
 - **Raw data** (JSON): Structured results for further analysis
 

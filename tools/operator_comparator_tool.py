@@ -82,7 +82,8 @@ class UniversalOperatorComparator:
         
     def run_comparison(self, operator_type: str, test_case_names: Optional[List[str]] = None,
                       implementation_names: Optional[List[str]] = None,
-                      warmup_runs: int = 5, test_runs: int = 20) -> Dict[str, List[ImplementationResult]]:
+                      warmup_runs: int = 5, test_runs: int = 20, 
+                      collect_outputs: bool = False) -> Tuple[Dict[str, List[ImplementationResult]], Dict[str, Dict[str, torch.Tensor]]]:
         """Run comparison for a specific operator"""
         # Map string to OperatorType
         type_mapping = {
@@ -106,6 +107,7 @@ class UniversalOperatorComparator:
             test_cases = [tc for tc in test_cases if tc.name in test_case_names]
             
         results = {}
+        output_results = {}
         
         for test_case in test_cases:
             print(f"\n=== Testing {operator_type.upper()} - {test_case.name} ===")
@@ -115,6 +117,23 @@ class UniversalOperatorComparator:
             case_results = operator.run_comparison(
                 test_case, implementation_names, warmup_runs, test_runs
             )
+            
+            # Collect outputs if requested
+            if collect_outputs:
+                output_results[test_case.name] = {}
+                inputs = operator.generate_inputs(test_case)
+                
+                for impl_name in operator.implementations:
+                    if implementation_names is None or impl_name in implementation_names:
+                        try:
+                            impl_info = operator.implementations[impl_name]
+                            impl_func = impl_info['function']
+                            with torch.no_grad():
+                                output = impl_func(inputs, {})
+                                output_results[test_case.name][impl_name] = output
+                        except Exception as e:
+                            print(f"  ⚠️  Failed to collect output for {impl_name}: {e}")
+                            output_results[test_case.name][impl_name] = None
             
             # Display results
             for result in case_results:
@@ -127,7 +146,7 @@ class UniversalOperatorComparator:
                     
             results[test_case.name] = case_results
             
-        return results
+        return results, output_results
         
     def generate_report(self, results: Dict[str, List[ImplementationResult]], 
                        operator_type: str, output_file: str = None) -> str:
@@ -270,8 +289,127 @@ class UniversalOperatorComparator:
         chart_files.append(times_file)
         
         return chart_files
-
-
+    
+    def calculate_accuracy_metrics(self, reference_results: Dict[str, torch.Tensor],
+                                  test_results: Dict[str, Dict[str, torch.Tensor]]) -> Dict[str, Dict[str, Dict[str, float]]]:
+        """Calculate accuracy metrics comparing all implementations to reference"""
+        accuracy_metrics = {}
+        
+        for test_case_name, ref_result in reference_results.items():
+            accuracy_metrics[test_case_name] = {}
+            
+            if test_case_name in test_results:
+                for impl_name, impl_result in test_results[test_case_name].items():
+                    if impl_result is not None:
+                        # Convert to CPU numpy for comparison
+                        ref_np = ref_result.detach().cpu().numpy()
+                        impl_np = impl_result.detach().cpu().numpy()
+                        
+                        # Calculate various accuracy metrics
+                        mse = np.mean((ref_np - impl_np) ** 2)
+                        mae = np.mean(np.abs(ref_np - impl_np))
+                        max_abs_error = np.max(np.abs(ref_np - impl_np))
+                        
+                        # Relative error (avoid division by zero)
+                        ref_norm = np.linalg.norm(ref_np)
+                        if ref_norm > 0:
+                            relative_error = np.linalg.norm(ref_np - impl_np) / ref_norm
+                        else:
+                            relative_error = 0.0
+                        
+                        # Cosine similarity
+                        ref_flat = ref_np.flatten()
+                        impl_flat = impl_np.flatten()
+                        cosine_sim = np.dot(ref_flat, impl_flat) / (np.linalg.norm(ref_flat) * np.linalg.norm(impl_flat))
+                        
+                        accuracy_metrics[test_case_name][impl_name] = {
+                            'mse': float(mse),
+                            'mae': float(mae),
+                            'max_abs_error': float(max_abs_error),
+                            'relative_error': float(relative_error),
+                            'cosine_similarity': float(cosine_sim)
+                        }
+        
+        return accuracy_metrics
+    
+    def create_accuracy_charts(self, accuracy_metrics: Dict[str, Dict[str, Dict[str, float]]],
+                             operator_type: str, output_prefix: str = "accuracy") -> List[str]:
+        """Generate accuracy comparison charts with relative and absolute error bars"""
+        if not MATPLOTLIB_AVAILABLE:
+            print("⚠️  Matplotlib not available, skipping accuracy chart generation")
+            return []
+        
+        chart_files = []
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        # Prepare data for visualization
+        test_cases = list(accuracy_metrics.keys())
+        implementations = set()
+        for case_metrics in accuracy_metrics.values():
+            implementations.update(case_metrics.keys())
+        
+        # Remove reference implementation from comparison (since it would be 0)
+        implementations.discard('pytorch_cpu')
+        implementations.discard('numpy_cpu')
+        implementations = sorted(list(implementations))
+        
+        if not implementations:
+            print("⚠️  No accuracy data available for chart generation")
+            return []
+        
+        # Create side-by-side subplots for relative and absolute error
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+        
+        x = np.arange(len(test_cases))
+        width = 0.8 / len(implementations)
+        
+        # Plot 1: Relative Error
+        for i, impl in enumerate(implementations):
+            relative_errors = []
+            for test_case in test_cases:
+                if test_case in accuracy_metrics and impl in accuracy_metrics[test_case]:
+                    relative_errors.append(accuracy_metrics[test_case][impl]['relative_error'])
+                else:
+                    relative_errors.append(0)
+            
+            ax1.bar(x + i * width, relative_errors, width, label=impl, alpha=0.8)
+        
+        ax1.set_xlabel('Test Cases')
+        ax1.set_ylabel('Relative Error')
+        ax1.set_title(f'{operator_type.upper()} Relative Error vs PyTorch CPU')
+        ax1.set_xticks(x + width * (len(implementations) - 1) / 2)
+        ax1.set_xticklabels(test_cases, rotation=45, ha='right')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        ax1.set_yscale('log')
+        
+        # Plot 2: Mean Absolute Error
+        for i, impl in enumerate(implementations):
+            mae_values = []
+            for test_case in test_cases:
+                if test_case in accuracy_metrics and impl in accuracy_metrics[test_case]:
+                    mae_values.append(accuracy_metrics[test_case][impl]['mae'])
+                else:
+                    mae_values.append(0)
+            
+            ax2.bar(x + i * width, mae_values, width, label=impl, alpha=0.8)
+        
+        ax2.set_xlabel('Test Cases')
+        ax2.set_ylabel('Mean Absolute Error')
+        ax2.set_title(f'{operator_type.upper()} Mean Absolute Error vs PyTorch CPU')
+        ax2.set_xticks(x + width * (len(implementations) - 1) / 2)
+        ax2.set_xticklabels(test_cases, rotation=45, ha='right')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        ax2.set_yscale('log')
+        
+        plt.tight_layout()
+        accuracy_file = f"{output_prefix}_accuracy_{timestamp}.png"
+        plt.savefig(accuracy_file, dpi=300, bbox_inches='tight')
+        plt.close()
+        chart_files.append(accuracy_file)
+        
+        return chart_files
 def main():
     parser = argparse.ArgumentParser(description='Universal Operator Comparison Tool')
     parser.add_argument('--operator', choices=['matmul', 'vector_add', 'relu'],
@@ -290,6 +428,8 @@ def main():
                        help='Test rounds')
     parser.add_argument('--plot', action='store_true',
                        help='Generate performance comparison charts')
+    parser.add_argument('--output-diff', action='store_true',
+                       help='Generate accuracy difference analysis (using CPU as reference)')
     parser.add_argument('--list-operators', action='store_true',
                        help='List all available operators')
     parser.add_argument('--list-implementations', action='store_true',
@@ -364,9 +504,9 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     
     # Run comparison
-    results = comparator.run_comparison(
+    results, output_results = comparator.run_comparison(
         args.operator, args.test_cases, args.implementations,
-        args.warmup, args.runs
+        args.warmup, args.runs, collect_outputs=args.output_diff
     )
     
     # Generate outputs
@@ -386,6 +526,34 @@ def main():
         chart_prefix = os.path.join(args.output_dir, args.output)
         chart_files = comparator.create_performance_charts(results, args.operator, chart_prefix)
     
+    # Generate accuracy analysis if requested
+    accuracy_chart_files = []
+    if args.output_diff and output_results:
+        # Find PyTorch CPU implementation as reference
+        reference_results = {}
+        
+        for test_case_name, case_outputs in output_results.items():
+            reference_result = None
+            # Use PyTorch CPU as reference
+            if 'pytorch_cpu' in case_outputs and case_outputs['pytorch_cpu'] is not None:
+                reference_result = case_outputs['pytorch_cpu']
+            elif 'numpy_cpu' in case_outputs and case_outputs['numpy_cpu'] is not None:
+                reference_result = case_outputs['numpy_cpu']
+            
+            if reference_result is not None:
+                reference_results[test_case_name] = reference_result
+        
+        if reference_results:
+            accuracy_metrics = comparator.calculate_accuracy_metrics(reference_results, output_results)
+            accuracy_prefix = os.path.join(args.output_dir, f"{args.output}_accuracy")
+            accuracy_chart_files = comparator.create_accuracy_charts(accuracy_metrics, args.operator, accuracy_prefix)
+            
+            # Save accuracy metrics to JSON
+            accuracy_json_file = os.path.join(args.output_dir, f"{args.output}_accuracy_{timestamp}.json")
+            with open(accuracy_json_file, 'w', encoding='utf-8') as f:
+                json.dump(accuracy_metrics, f, indent=2, ensure_ascii=False)
+            print(f"✅ Accuracy metrics saved: {accuracy_json_file}")
+    
     print("=" * 60)
     print("Comparison test completed!")
     print(f"📄 Detailed report: {report_file}")
@@ -393,6 +561,10 @@ def main():
     if chart_files:
         print("📈 Performance charts:")
         for chart_file in chart_files:
+            print(f"    📊 {chart_file}")
+    if accuracy_chart_files:
+        print("📈 Accuracy charts:")
+        for chart_file in accuracy_chart_files:
             print(f"    📊 {chart_file}")
     
     return 0
