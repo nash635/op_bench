@@ -86,9 +86,9 @@ def run_pytorch_profiler_analysis(matrix_sizes: List[int], output_dir: Path):
     # 加载扩展
     try:
         import matmul_cuda_ext
-        print("✓ CUDA扩展加载成功")
+        print("[PASS] CUDA扩展加载成功")
     except Exception as e:
-        print(f"✗ CUDA扩展加载失败: {e}")
+        print(f"[FAIL] CUDA扩展加载失败: {e}")
         return
     
     output_dir.mkdir(exist_ok=True)
@@ -159,7 +159,7 @@ def run_pytorch_profiler_analysis(matrix_sizes: List[int], output_dir: Path):
     report_file = output_dir / "pytorch_profiler_report.md"
     generate_pytorch_profiler_report(results, report_file)
     
-    print(f"\n✓ PyTorch Profiler 分析完成")
+    print(f"\n[PASS] PyTorch Profiler 分析完成")
     print(f"结果保存在: {output_dir}/")
     print(f"查看报告: cat {report_file}")
     print("使用 Chrome 浏览器打开 .json 文件查看详细的 profiling 时间线")
@@ -255,11 +255,11 @@ def main():
     if not args.force_pytorch_profiler:
         print("检查 Nsight Compute 权限...")
         if check_ncu_permissions():
-            print("✓ Nsight Compute 权限正常，可以使用 ncu_profiler.py")
+            print("[PASS] Nsight Compute 权限正常，可以使用 ncu_profiler.py")
             print("运行: python ncu_profiler.py --sizes", ' '.join(map(str, args.sizes)))
             return 0
         else:
-            print("✗ Nsight Compute 权限不足")
+            print("[FAIL] Nsight Compute 权限不足")
             provide_permission_guidance()
             
             print("\n使用 PyTorch Profiler 作为替代方案...")

@@ -25,9 +25,9 @@ def test_correctness():
             extra_cuda_cflags=['-O3', '--expt-relaxed-constexpr', '-std=c++17'],
             verbose=False
         )
-        print("✓ 扩展加载成功")
+        print("[PASS] 扩展加载成功")
     except Exception as e:
-        print(f"✗ 扩展加载失败: {e}")
+        print(f"[FAIL] 扩展加载失败: {e}")
         return False
     
     # 创建测试矩阵
@@ -54,20 +54,20 @@ def test_correctness():
             try:
                 result = func()
                 is_correct = torch.allclose(result, reference, rtol=1e-4, atol=1e-4)
-                status = "✓" if is_correct else "✗"
+                status = "[PASS]" if is_correct else "[FAIL]"
                 print(f"  {status} {name}: {'正确' if is_correct else '错误'}")
                 if not is_correct:
                     max_diff = torch.max(torch.abs(result - reference)).item()
                     print(f"    最大差异: {max_diff}")
                     all_correct = False
             except Exception as e:
-                print(f"  ✗ {name}: 异常 - {e}")
+                print(f"  [FAIL] {name}: 异常 - {e}")
                 all_correct = False
         
         if not all_correct:
             return False
     
-    print("\n✓ 所有测试通过!")
+    print("\n[PASS] 所有测试通过!")
     return True
 
 def test_performance():

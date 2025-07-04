@@ -88,7 +88,7 @@ try:
     from your_operator import YourOperator
     comparator.register_operator(YourOperator())
 except ImportError as e:
-    print(f"⚠️  YourOperator not available: {e}")
+    print(f"[WARN] YourOperator not available: {e}")
 ```
 
 ## Usage Examples

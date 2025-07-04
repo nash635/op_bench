@@ -22,9 +22,9 @@ class NsightProfiler:
         try:
             import matmul_cuda_ext
             self.matmul_cuda = matmul_cuda_ext
-            print("✓ CUDA扩展加载成功")
+            print("[PASS] CUDA扩展加载成功")
         except Exception as e:
-            print(f"✗ CUDA扩展加载失败: {e}")
+            print(f"[FAIL] CUDA扩展加载失败: {e}")
             self.matmul_cuda = None
     
     def check_nsight_availability(self) -> bool:
@@ -33,13 +33,13 @@ class NsightProfiler:
             result = subprocess.run(['nsys', '--version'], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
-                print(f"✓ Nsight Systems 可用: {result.stdout.strip()}")
+                print(f"[PASS] Nsight Systems 可用: {result.stdout.strip()}")
                 return True
             else:
-                print("✗ Nsight Systems 不可用")
+                print("[FAIL] Nsight Systems 不可用")
                 return False
         except (subprocess.TimeoutExpired, FileNotFoundError):
-            print("✗ 未找到 nsys 命令，请确保 Nsight Systems 已安装并在 PATH 中")
+            print("[FAIL] 未找到 nsys 命令，请确保 Nsight Systems 已安装并在 PATH 中")
             return False
     
     def check_nsight_compute_availability(self) -> bool:
@@ -48,13 +48,13 @@ class NsightProfiler:
             result = subprocess.run(['ncu', '--version'], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
-                print(f"✓ Nsight Compute 可用: {result.stdout.strip().split()[0:3]}")
+                print(f"[PASS] Nsight Compute 可用: {result.stdout.strip().split()[0:3]}")
                 return True
             else:
-                print("✗ Nsight Compute 不可用")
+                print("[FAIL] Nsight Compute 不可用")
                 return False
         except (subprocess.TimeoutExpired, FileNotFoundError):
-            print("✗ 未找到 ncu 命令，请确保 Nsight Compute 已安装并在 PATH 中")
+            print("[FAIL] 未找到 ncu 命令，请确保 Nsight Compute 已安装并在 PATH 中")
             return False
     
     def create_test_matrices(self, m: int, n: int, k: int) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -149,18 +149,18 @@ torch.cuda.nvtx.range_pop()
         try:
             result = subprocess.run(nsys_cmd, capture_output=True, text=True, timeout=60)
             if result.returncode == 0:
-                print(f"    ✓ Profile 保存至: {output_file}")
+                print(f"    [PASS] Profile 保存至: {output_file}")
                 # 清理临时文件
                 temp_script.unlink()
                 return str(output_file)
             else:
-                print(f"    ✗ Profiling 失败: {result.stderr}")
+                print(f"    [FAIL] Profiling 失败: {result.stderr}")
                 return ""
         except subprocess.TimeoutExpired:
-            print(f"    ✗ Profiling 超时")
+            print(f"    [FAIL] Profiling 超时")
             return ""
         except Exception as e:
-            print(f"    ✗ Profiling 异常: {e}")
+            print(f"    [FAIL] Profiling 异常: {e}")
             return ""
     
     def profile_kernel_with_ncu(self, kernel_name: str, A: torch.Tensor, B: torch.Tensor,
@@ -243,18 +243,18 @@ torch.cuda.synchronize()
         try:
             result = subprocess.run(ncu_cmd, capture_output=True, text=True, timeout=120)
             if result.returncode == 0:
-                print(f"    ✓ NCU Profile 保存至: {output_file}")
+                print(f"    [PASS] NCU Profile 保存至: {output_file}")
                 # 清理临时文件
                 temp_script.unlink()
                 return str(output_file)
             else:
-                print(f"    ✗ NCU Profiling 失败: {result.stderr}")
+                print(f"    [FAIL] NCU Profiling 失败: {result.stderr}")
                 return ""
         except subprocess.TimeoutExpired:
-            print(f"    ✗ NCU Profiling 超时")
+            print(f"    [FAIL] NCU Profiling 超时")
             return ""
         except Exception as e:
-            print(f"    ✗ NCU Profiling 异常: {e}")
+            print(f"    [FAIL] NCU Profiling 异常: {e}")
             return ""
 
     def profile_all_kernels(self, matrix_sizes: List[Tuple[int, int, int]], 
@@ -394,7 +394,7 @@ done
         
         # 添加执行权限
         os.chmod(analysis_script, 0o755)
-        print(f"\n✓ 分析脚本已生成: {analysis_script}")
+        print(f"\n[PASS] 分析脚本已生成: {analysis_script}")
     
     def generate_ncu_analysis_script(self, ncu_profile_files: Dict[str, List[str]]):
         """生成 Nsight Compute 分析脚本"""
@@ -449,7 +449,7 @@ done
         
         # 添加执行权限
         os.chmod(analysis_script, 0o755)
-        print(f"\n✓ NCU 分析脚本已生成: {analysis_script}")
+        print(f"\n[PASS] NCU 分析脚本已生成: {analysis_script}")
     
     def generate_summary_report(self, profile_files: Dict[str, List[str]]):
         """生成 profiling 总结报告"""
@@ -520,7 +520,7 @@ nsys export --type sqlite --output profile_data.sqlite <profile_file.nsys-rep>
         with open(report_file, 'w') as f:
             f.write(content)
         
-        print(f"✓ 总结报告已生成: {report_file}")
+        print(f"[PASS] 总结报告已生成: {report_file}")
     
     def generate_comprehensive_report(self, nsys_files: Dict[str, List[str]], 
                                      ncu_files: Dict[str, List[str]], mode: str):
@@ -681,7 +681,7 @@ ncu-ui *.ncu-rep
         with open(report_file, 'w') as f:
             f.write(content)
         
-        print(f"✓ 综合分析报告已生成: {report_file}")
+        print(f"[PASS] 综合分析报告已生成: {report_file}")
 def main():
     parser = argparse.ArgumentParser(description='CUDA MatMul Nsight Systems/Compute Profiling')
     parser.add_argument('--output', '-o', default='nsight_profiles', 

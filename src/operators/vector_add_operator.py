@@ -104,7 +104,7 @@ class VectorAddOperator(BaseOperator):
                 "Custom CUDA vector addition kernel"
             )
         except:
-            print("⚠️  Custom CUDA vector add not available")
+            print("[WARN] Custom CUDA vector add not available")
             
         # CuPy implementations
         try:
@@ -117,7 +117,7 @@ class VectorAddOperator(BaseOperator):
             )
             
         except ImportError:
-            print("⚠️  CuPy not available")
+            print("[WARN] CuPy not available")
             
         # Set reference implementation
         self.set_reference_implementation("pytorch_add")
