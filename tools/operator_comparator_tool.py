@@ -51,7 +51,8 @@ class UniversalOperatorComparator:
         type_mapping = {
             'matmul': OperatorType.MATMUL,
             'vector_add': OperatorType.VECTOR_ADD,
-            'relu': OperatorType.ACTIVATION
+            'relu': OperatorType.ACTIVATION,
+            'rmsnorm': OperatorType.ELEMENT_WISE
         }
         
         if operator_type not in type_mapping:
@@ -68,7 +69,8 @@ class UniversalOperatorComparator:
         type_mapping = {
             'matmul': OperatorType.MATMUL,
             'vector_add': OperatorType.VECTOR_ADD,
-            'relu': OperatorType.ACTIVATION
+            'relu': OperatorType.ACTIVATION,
+            'rmsnorm': OperatorType.ELEMENT_WISE
         }
         
         if operator_type not in type_mapping:
@@ -89,7 +91,8 @@ class UniversalOperatorComparator:
         type_mapping = {
             'matmul': OperatorType.MATMUL,
             'vector_add': OperatorType.VECTOR_ADD,
-            'relu': OperatorType.ACTIVATION
+            'relu': OperatorType.ACTIVATION,
+            'rmsnorm': OperatorType.ELEMENT_WISE
         }
         
         if operator_type not in type_mapping:
@@ -412,7 +415,7 @@ class UniversalOperatorComparator:
         return chart_files
 def main():
     parser = argparse.ArgumentParser(description='Universal Operator Comparison Tool')
-    parser.add_argument('--operator', choices=['matmul', 'vector_add', 'relu'],
+    parser.add_argument('--operator', choices=['matmul', 'vector_add', 'relu', 'rmsnorm'],
                        help='Operator type to test')
     parser.add_argument('--test-cases', nargs='+', 
                        help='Test cases to run (default: all)')
@@ -460,6 +463,12 @@ def main():
         comparator.register_operator(ReLUOperator())
     except ImportError as e:
         print(f"⚠️  ReLU operator not available: {e}")
+        
+    try:
+        from operators.rmsnorm_operator import RMSNormOperator
+        comparator.register_operator(RMSNormOperator())
+    except ImportError as e:
+        print(f"⚠️  RMSNorm operator not available: {e}")
     
     # Handle list commands first
     if args.list_operators:
@@ -535,7 +544,9 @@ def main():
         for test_case_name, case_outputs in output_results.items():
             reference_result = None
             # Use PyTorch CPU as reference
-            if 'pytorch_cpu' in case_outputs and case_outputs['pytorch_cpu'] is not None:
+            if 'cpu_reference' in case_outputs and case_outputs['cpu_reference'] is not None:
+                reference_result = case_outputs['cpu_reference']
+            elif 'pytorch_cpu' in case_outputs and case_outputs['pytorch_cpu'] is not None:
                 reference_result = case_outputs['pytorch_cpu']
             elif 'numpy_cpu' in case_outputs and case_outputs['numpy_cpu'] is not None:
                 reference_result = case_outputs['numpy_cpu']
@@ -553,6 +564,8 @@ def main():
             with open(accuracy_json_file, 'w', encoding='utf-8') as f:
                 json.dump(accuracy_metrics, f, indent=2, ensure_ascii=False)
             print(f"✅ Accuracy metrics saved: {accuracy_json_file}")
+        else:
+            print("⚠️  No suitable reference implementation found for accuracy comparison")
     
     print("=" * 60)
     print("Comparison test completed!")
