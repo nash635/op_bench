@@ -46,6 +46,9 @@ python run_comparator.py --operator vector_add --test-cases small_tensor
 # Compare ReLU implementations
 python run_comparator.py --operator relu --test-cases small_tensor
 
+# Compare RMSNorm implementations (fused vs unfused)
+python run_comparator.py --operator rmsnorm --test-cases small_sequence
+
 # Generate plots and save to a specific directory
 python run_comparator.py --operator matmul --test-cases small_square --output-dir my_results --plot
 
@@ -70,6 +73,12 @@ python run_comparator.py --operator matmul --test-cases small_square --output-di
 - **PyTorch**: torch.relu, torch.nn.functional.relu
 - **CUDA Kernels**: Custom element-wise ReLU
 - **CuPy**: cupy.maximum with zero
+
+### RMSNorm (Root Mean Square Normalization)
+- **Fused implementations**: Semi-fused, custom CUDA kernels
+- **Unfused implementations**: Step-by-step PyTorch operations
+- **Comparison targets**: LayerNorm, explicit intermediate storage
+- **Mathematical equivalence**: All implementations produce identical results
 
 ## Framework Features
 
