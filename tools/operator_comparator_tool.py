@@ -23,10 +23,10 @@ try:
     import seaborn as sns
     plt.style.use('default')
     MATPLOTLIB_AVAILABLE = True
-    print("✅ Matplotlib available for chart generation")
+    print("[INFO] Matplotlib available for chart generation")
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
-    print("⚠️  Matplotlib not available, skipping chart generation")
+    print("[WARN] Matplotlib not available, skipping chart generation")
 
 from framework.operator_framework import BaseOperator, OperatorType, OperatorTestCase, ImplementationResult
 
@@ -135,17 +135,17 @@ class UniversalOperatorComparator:
                                 output = impl_func(inputs, {})
                                 output_results[test_case.name][impl_name] = output
                         except Exception as e:
-                            print(f"  ⚠️  Failed to collect output for {impl_name}: {e}")
+                            print(f"  [WARN] Failed to collect output for {impl_name}: {e}")
                             output_results[test_case.name][impl_name] = None
             
             # Display results
             for result in case_results:
                 if result.available and result.correct:
-                    print(f"  ✅ {result.name}: {result.avg_time_ms:.3f}ms, {result.gflops:.1f} GFLOPS")
+                    print(f"  [PASS] {result.name}: {result.avg_time_ms:.3f}ms, {result.gflops:.1f} GFLOPS")
                 elif result.available and not result.correct:
-                    print(f"  ❌ {result.name}: {result.avg_time_ms:.3f}ms, {result.gflops:.1f} GFLOPS (INCORRECT)")
+                    print(f"  [FAIL] {result.name}: {result.avg_time_ms:.3f}ms, {result.gflops:.1f} GFLOPS (INCORRECT)")
                 else:
-                    print(f"  ❌ {result.name}: Not available - {result.error}")
+                    print(f"  [FAIL] {result.name}: Not available - {result.error}")
                     
             results[test_case.name] = case_results
             
@@ -170,18 +170,18 @@ class UniversalOperatorComparator:
             
             for result in case_results:
                 if result.available:
-                    available_str = "✅" if result.correct else "⚠️"
-                    correct_str = "✅" if result.correct else "❌"
+                    available_str = "[PASS]" if result.correct else "[WARN]"
+                    correct_str = "[PASS]" if result.correct else "[FAIL]"
                     report += f"| {result.name} | {available_str} | {correct_str} | {result.avg_time_ms:.3f} | {result.gflops:.1f} | {result.min_time_ms:.3f} | {result.std_time_ms:.3f} |\n"
                 else:
-                    report += f"| {result.name} | ❌ | N/A | N/A | N/A | N/A | N/A |\n"
+                    report += f"| {result.name} | [FAIL] | N/A | N/A | N/A | N/A | N/A |\n"
                     
             report += "\n"
             
         if output_file:
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(report)
-            print(f"✅ Report saved: {output_file}")
+            print(f"[INFO] Report saved: {output_file}")
             
         return report
         
@@ -210,13 +210,13 @@ class UniversalOperatorComparator:
                 
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(json_results, f, indent=2, ensure_ascii=False)
-        print(f"✅ JSON results saved: {output_file}")
+        print(f"[INFO] JSON results saved: {output_file}")
         
     def create_performance_charts(self, results: Dict[str, List[ImplementationResult]], 
                                  operator_type: str, output_prefix: str = "comparison") -> List[str]:
         """Generate performance comparison charts"""
         if not MATPLOTLIB_AVAILABLE:
-            print("⚠️  Matplotlib not available, skipping chart generation")
+            print("[WARN] Matplotlib not available, skipping chart generation")
             return []
             
         chart_files = []
@@ -233,14 +233,21 @@ class UniversalOperatorComparator:
         
         # Check if we have any successful implementations
         if not implementations:
-            print("⚠️  No successful implementations found for chart generation")
+            print("[WARN] No successful implementations found for chart generation")
             return []
         
         # GFLOPS chart
         fig, ax = plt.subplots(figsize=(12, 8))
         
         x = np.arange(len(test_cases))
-        width = 0.8 / len(implementations)
+        # Optimize bar width for better visualization when there are few test cases
+        if len(test_cases) == 1:
+            # For single test case, use narrower bars and center them properly
+            width = min(0.6 / len(implementations), 0.15)
+            x_offset = 0.3  # Center the bars in the plot
+        else:
+            width = 0.8 / len(implementations)
+            x_offset = 0
         
         for i, impl in enumerate(implementations):
             gflops_data = []
@@ -249,12 +256,20 @@ class UniversalOperatorComparator:
                 impl_result = next((r for r in case_results if r.name == impl and r.available and r.correct), None)
                 gflops_data.append(impl_result.gflops if impl_result else 0)
                 
-            ax.bar(x + i * width, gflops_data, width, label=impl, alpha=0.8)
+            bar_positions = x + i * width + x_offset
+            ax.bar(bar_positions, gflops_data, width, label=impl, alpha=0.8)
             
         ax.set_xlabel('Test Cases')
         ax.set_ylabel('GFLOPS')
         ax.set_title(f'{operator_type.upper()} Performance Comparison (GFLOPS)')
-        ax.set_xticks(x + width * (len(implementations) - 1) / 2)
+        
+        # Adjust x-axis settings based on number of test cases
+        if len(test_cases) == 1:
+            ax.set_xticks([0.3 + width * (len(implementations) - 1) / 2])
+            ax.set_xlim(-0.2, 1.2)  # Limit x-axis range for single test case
+        else:
+            ax.set_xticks(x + width * (len(implementations) - 1) / 2)
+            
         ax.set_xticklabels(test_cases, rotation=45, ha='right')
         ax.legend()
         ax.grid(True, alpha=0.3)
@@ -268,6 +283,7 @@ class UniversalOperatorComparator:
         # Execution time chart
         fig, ax = plt.subplots(figsize=(12, 8))
         
+        # Use the same width and offset settings as GFLOPS chart
         for i, impl in enumerate(implementations):
             times_data = []
             for test_case in test_cases:
@@ -275,12 +291,20 @@ class UniversalOperatorComparator:
                 impl_result = next((r for r in case_results if r.name == impl and r.available and r.correct), None)
                 times_data.append(impl_result.avg_time_ms if impl_result else 0)
                 
-            ax.bar(x + i * width, times_data, width, label=impl, alpha=0.8)
+            bar_positions = x + i * width + x_offset
+            ax.bar(bar_positions, times_data, width, label=impl, alpha=0.8)
             
         ax.set_xlabel('Test Cases')
         ax.set_ylabel('Execution Time (ms)')
         ax.set_title(f'{operator_type.upper()} Performance Comparison (Execution Time)')
-        ax.set_xticks(x + width * (len(implementations) - 1) / 2)
+        
+        # Adjust x-axis settings based on number of test cases
+        if len(test_cases) == 1:
+            ax.set_xticks([0.3 + width * (len(implementations) - 1) / 2])
+            ax.set_xlim(-0.2, 1.2)  # Limit x-axis range for single test case
+        else:
+            ax.set_xticks(x + width * (len(implementations) - 1) / 2)
+            
         ax.set_xticklabels(test_cases, rotation=45, ha='right')
         ax.legend()
         ax.grid(True, alpha=0.3)
@@ -339,7 +363,7 @@ class UniversalOperatorComparator:
                              operator_type: str, output_prefix: str = "accuracy") -> List[str]:
         """Generate accuracy comparison charts with relative and absolute error bars"""
         if not MATPLOTLIB_AVAILABLE:
-            print("⚠️  Matplotlib not available, skipping accuracy chart generation")
+            print("[WARN] Matplotlib not available, skipping accuracy chart generation")
             return []
         
         chart_files = []
@@ -357,14 +381,21 @@ class UniversalOperatorComparator:
         implementations = sorted(list(implementations))
         
         if not implementations:
-            print("⚠️  No accuracy data available for chart generation")
+            print("[WARN] No accuracy data available for chart generation")
             return []
         
         # Create side-by-side subplots for relative and absolute error
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
         
         x = np.arange(len(test_cases))
-        width = 0.8 / len(implementations)
+        # Optimize bar width for better visualization when there are few test cases
+        if len(test_cases) == 1:
+            # For single test case, use narrower bars and center them properly
+            width = min(0.6 / len(implementations), 0.15)
+            x_offset = 0.3  # Center the bars in the plot
+        else:
+            width = 0.8 / len(implementations)
+            x_offset = 0
         
         # Plot 1: Relative Error
         for i, impl in enumerate(implementations):
@@ -375,12 +406,20 @@ class UniversalOperatorComparator:
                 else:
                     relative_errors.append(0)
             
-            ax1.bar(x + i * width, relative_errors, width, label=impl, alpha=0.8)
+            bar_positions = x + i * width + x_offset
+            ax1.bar(bar_positions, relative_errors, width, label=impl, alpha=0.8)
         
         ax1.set_xlabel('Test Cases')
         ax1.set_ylabel('Relative Error')
         ax1.set_title(f'{operator_type.upper()} Relative Error vs PyTorch CPU')
-        ax1.set_xticks(x + width * (len(implementations) - 1) / 2)
+        
+        # Adjust x-axis settings based on number of test cases
+        if len(test_cases) == 1:
+            ax1.set_xticks([0.3 + width * (len(implementations) - 1) / 2])
+            ax1.set_xlim(-0.2, 1.2)  # Limit x-axis range for single test case
+        else:
+            ax1.set_xticks(x + width * (len(implementations) - 1) / 2)
+            
         ax1.set_xticklabels(test_cases, rotation=45, ha='right')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
@@ -395,12 +434,20 @@ class UniversalOperatorComparator:
                 else:
                     mae_values.append(0)
             
-            ax2.bar(x + i * width, mae_values, width, label=impl, alpha=0.8)
+            bar_positions = x + i * width + x_offset
+            ax2.bar(bar_positions, mae_values, width, label=impl, alpha=0.8)
         
         ax2.set_xlabel('Test Cases')
         ax2.set_ylabel('Mean Absolute Error')
         ax2.set_title(f'{operator_type.upper()} Mean Absolute Error vs PyTorch CPU')
-        ax2.set_xticks(x + width * (len(implementations) - 1) / 2)
+        
+        # Adjust x-axis settings based on number of test cases
+        if len(test_cases) == 1:
+            ax2.set_xticks([0.3 + width * (len(implementations) - 1) / 2])
+            ax2.set_xlim(-0.2, 1.2)  # Limit x-axis range for single test case
+        else:
+            ax2.set_xticks(x + width * (len(implementations) - 1) / 2)
+            
         ax2.set_xticklabels(test_cases, rotation=45, ha='right')
         ax2.legend()
         ax2.grid(True, alpha=0.3)
@@ -450,25 +497,25 @@ def main():
         from operators.matmul_operator import MatMulOperator
         comparator.register_operator(MatMulOperator())
     except ImportError as e:
-        print(f"⚠️  MatMul operator not available: {e}")
+        print(f"[WARN] MatMul operator not available: {e}")
         
     try:
         from operators.vector_add_operator import VectorAddOperator
         comparator.register_operator(VectorAddOperator())
     except ImportError as e:
-        print(f"⚠️  VectorAdd operator not available: {e}")
+        print(f"[WARN] VectorAdd operator not available: {e}")
         
     try:
         from operators.relu_operator import ReLUOperator
         comparator.register_operator(ReLUOperator())
     except ImportError as e:
-        print(f"⚠️  ReLU operator not available: {e}")
+        print(f"[WARN] ReLU operator not available: {e}")
         
     try:
         from operators.rmsnorm_operator import RMSNormOperator
         comparator.register_operator(RMSNormOperator())
     except ImportError as e:
-        print(f"⚠️  RMSNorm operator not available: {e}")
+        print(f"[WARN] RMSNorm operator not available: {e}")
     
     # Handle list commands first
     if args.list_operators:
@@ -501,13 +548,13 @@ def main():
     
     # Check CUDA availability
     if not torch.cuda.is_available():
-        print("❌ CUDA not available")
+        print("[FAIL] CUDA not available")
         return 1
         
     print("=" * 60)
     print(f"{args.operator.upper()} Implementation Comparison Test")
     print("=" * 60)
-    print(f"✅ CUDA device: {torch.cuda.get_device_name()}")
+    print(f"[INFO] CUDA device: {torch.cuda.get_device_name()}")
     
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
@@ -563,22 +610,22 @@ def main():
             accuracy_json_file = os.path.join(args.output_dir, f"{args.output}_accuracy_{timestamp}.json")
             with open(accuracy_json_file, 'w', encoding='utf-8') as f:
                 json.dump(accuracy_metrics, f, indent=2, ensure_ascii=False)
-            print(f"✅ Accuracy metrics saved: {accuracy_json_file}")
+            print(f"[INFO] Accuracy metrics saved: {accuracy_json_file}")
         else:
-            print("⚠️  No suitable reference implementation found for accuracy comparison")
+            print("[WARN] No suitable reference implementation found for accuracy comparison")
     
     print("=" * 60)
     print("Comparison test completed!")
-    print(f"📄 Detailed report: {report_file}")
-    print(f"📊 JSON data: {json_file}")
+    print(f"[INFO] Detailed report: {report_file}")
+    print(f"[INFO] JSON data: {json_file}")
     if chart_files:
-        print("📈 Performance charts:")
+        print("[INFO] Performance charts:")
         for chart_file in chart_files:
-            print(f"    📊 {chart_file}")
+            print(f"    [CHART] {chart_file}")
     if accuracy_chart_files:
-        print("📈 Accuracy charts:")
+        print("[INFO] Accuracy charts:")
         for chart_file in accuracy_chart_files:
-            print(f"    📊 {chart_file}")
+            print(f"    [CHART] {chart_file}")
     
     return 0
 

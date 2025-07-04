@@ -32,7 +32,7 @@ $PYTHON_EXECUTABLE -c "import torch; assert torch.cuda.is_available(), 'CUDA不�
     exit 1
 }
 
-echo "✓ 环境检查通过"
+echo "[PASS] 环境检查通过"
 
 # 清理之前的构建
 echo "清理之前的构建文件..."
@@ -43,11 +43,11 @@ echo "运行构建..."
 $PYTHON_EXECUTABLE setup.py build_ext --inplace
 
 if [ $? -ne 0 ]; then
-    echo "✗ 构建失败"
+    echo "[FAIL] 构建失败"
     exit 1
 fi
 
-echo "✓ 构建成功"
+echo "[PASS] 构建成功"
 
 # 运行测试
 echo "运行正确性测试..."

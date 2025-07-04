@@ -248,10 +248,10 @@ for _ in range({iterations}):
             result = subprocess.run(ncu_cmd, capture_output=True, text=True, timeout=300)
             
             if result.returncode == 0:
-                print(f"✓ Successfully profiled {kernel_name}")
+                print(f"[PASS] Successfully profiled {kernel_name}")
                 return str(output_file)
             else:
-                print(f"✗ Failed to profile {kernel_name}")
+                print(f"[FAIL] Failed to profile {kernel_name}")
                 print(f"Error: {result.stderr}")
                 if 'ERR_NVGPUCTRPERM' in result.stderr:
                     print("\n" + "="*60)
@@ -265,10 +265,10 @@ for _ in range({iterations}):
                 return None
                 
         except subprocess.TimeoutExpired:
-            print(f"✗ Timeout profiling {kernel_name}")
+            print(f"[FAIL] Timeout profiling {kernel_name}")
             return None
         except Exception as e:
-            print(f"✗ Error profiling {kernel_name}: {e}")
+            print(f"[FAIL] Error profiling {kernel_name}: {e}")
             return None
     
     def profile_multiple_kernels(self, kernels: List[str], matrix_sizes: List[Tuple[int, int, int]], 
@@ -291,7 +291,7 @@ for _ in range({iterations}):
                 print(f"Warning: Unknown kernel {kernel}, skipping...")
                 continue
                 
-            print(f"\n📊 Profiling {kernel}: {self.kernels_info[kernel]}")
+            print(f"\n[INFO] Profiling {kernel}: {self.kernels_info[kernel]}")
             kernel_results = []
             
             for matrix_size in matrix_sizes:
@@ -319,7 +319,7 @@ echo "==================================================="
 """
         
         for kernel, files in profile_files.items():
-            script_content += f'\necho "\\n📊 Analyzing {kernel}..."\n'
+            script_content += f'\necho "\\n[INFO] Analyzing {kernel}..."\n'
             for profile_file in files:
                 profile_name = Path(profile_file).stem
                 script_content += f'''
@@ -329,7 +329,7 @@ echo ""
 '''
         
         script_content += '''
-echo "\\n📈 Generating detailed reports..."
+echo "\\n[CHART] Generating detailed reports..."
 for ncu_file in *.ncu-rep; do
     if [ -f "$ncu_file" ]; then
         base_name=$(basename "$ncu_file" .ncu-rep)
@@ -338,7 +338,7 @@ for ncu_file in *.ncu-rep; do
     fi
 done
 
-echo "\\n✅ Analysis complete!"
+echo "\\n[INFO] Analysis complete!"
 echo "Profile files: *.ncu-rep"
 echo "CSV exports: *.csv"
 echo "To view in GUI: ncu --import <profile_file>"
@@ -349,7 +349,7 @@ echo "To view in GUI: ncu --import <profile_file>"
             
         # Make executable
         os.chmod(script_path, 0o755)
-        print(f"✓ Generated analysis script: {script_path}")
+        print(f"[PASS] Generated analysis script: {script_path}")
         
     def generate_summary_report(self, profile_files: Dict[str, List[str]], metrics_set: str):
         """Generate a summary report."""
@@ -392,7 +392,7 @@ echo "To view in GUI: ncu --import <profile_file>"
             f.write("3. Compare kernel performance using the CSV exports\\n")
             f.write("4. Use profiling_alternative.py for PyTorch Profiler analysis\\n")
             
-        print(f"✓ Generated summary report: {report_path}")
+        print(f"[PASS] Generated summary report: {report_path}")
 
 
 def main():
@@ -429,7 +429,7 @@ def main():
     print(f"GPU 兼容性: {gpu_msg}")
     
     if not gpu_compatible:
-        print("\\n❌ 当前 GPU 不支持 Nsight Compute!")
+        print("\\n[FAIL] 当前 GPU 不支持 Nsight Compute!")
         print("建议使用替代方案:")
         print("  - Nsight Systems: python profile_nsight.py --mode nsys")
         print("  - PyTorch Profiler: python profiling_alternative.py")
@@ -437,7 +437,7 @@ def main():
     
     # Check permissions
     if not args.sudo and not profiler.check_ncu_permissions():
-        print("⚠️  NCU permission check failed!")
+        print("[WARN] NCU permission check failed!")
         print("You may need to use --sudo or configure system permissions.")
         print("Alternatively, use: python profiling_alternative.py")
         
@@ -446,7 +446,7 @@ def main():
             print("Exiting. Use --sudo or configure permissions.")
             return 1
     
-    print(f"🚀 Starting NCU profiling...")
+    print(f"[INFO] Starting NCU profiling...")
     print(f"Output directory: {profiler.output_dir}")
     print(f"Matrix sizes: {args.sizes}")
     print(f"Kernels: {args.kernels}")
@@ -459,7 +459,7 @@ def main():
     )
     
     if not profile_files:
-        print("❌ No successful profiles generated!")
+        print("[FAIL] No successful profiles generated!")
         print("\\nTroubleshooting:")
         print("1. Check CUDA installation: nvcc --version")
         print("2. Try with sudo: python ncu_profiler.py --sudo ...")
@@ -470,10 +470,10 @@ def main():
     profiler.generate_analysis_script(profile_files)
     profiler.generate_summary_report(profile_files, args.metrics)
     
-    print(f"\\n✅ Profiling complete!")
-    print(f"📁 Results saved to: {profiler.output_dir}")
-    print(f"📊 Profile files: {sum(len(files) for files in profile_files.values())}")
-    print(f"\\n📋 Next steps:")
+    print(f"\\n[INFO] Profiling complete!")
+    print(f"[INFO] Results saved to: {profiler.output_dir}")
+    print(f"[INFO] Profile files: {sum(len(files) for files in profile_files.values())}")
+    print(f"\\n[INFO] Next steps:")
     print(f"   cd {profiler.output_dir}")
     print(f"   ./analyze_ncu_profiles.sh")
     print(f"   # or open *.ncu-rep files in Nsight Compute GUI")

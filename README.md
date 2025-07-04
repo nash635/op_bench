@@ -56,30 +56,6 @@ python run_comparator.py --operator matmul --test-cases small_square --output-di
 python run_comparator.py --operator matmul --test-cases small_square --output-dir result --plot --output-diff
 ```
 
-## Supported Operators
-
-### Matrix Multiplication (MatMul)
-- **PyTorch**: torch.mm, torch.addmm, torch.bmm
-- **CUDA Kernels**: Basic, shared memory, template-based
-- **CuPy**: cupy.matmul
-
-### Vector Addition
-- **PyTorch**: torch.add
-- **CUDA Kernels**: Basic element-wise addition
-- **CuPy**: cupy.add
-- **NumPy**: numpy.add
-
-### ReLU Activation
-- **PyTorch**: torch.relu, torch.nn.functional.relu
-- **CUDA Kernels**: Custom element-wise ReLU
-- **CuPy**: cupy.maximum with zero
-
-### RMSNorm (Root Mean Square Normalization)
-- **Fused implementations**: Semi-fused, custom CUDA kernels
-- **Unfused implementations**: Step-by-step PyTorch operations
-- **Comparison targets**: LayerNorm, explicit intermediate storage
-- **Mathematical equivalence**: All implementations produce identical results
-
 ## Framework Features
 
 ### Modular Design

@@ -30,42 +30,40 @@ NC='\033[0m' # No Color
 
 # Helper functions
 log_info() {
-    echo -e "${BLUE}ℹ️  $1${NC}"
+    echo -e "${BLUE}[INFO] $1${NC}"
 }
 
 log_success() {
-    echo -e "${GREEN}✅ $1${NC}"
+    echo -e "${GREEN}[PASS] $1${NC}"
 }
 
 log_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
+    echo -e "${YELLOW}[WARN] $1${NC}"
 }
-
-# Success message
-echo
-if [ "$SKIP_CUDA" = "false" ]; then
-    log_success "CUDA extension build completed successfully!"
-else
-    log_success "Framework build completed successfully!"
-fi
-echo
-echo "🎯 Ready to use:"
-echo "   List operators: python run_comparator.py --list-operators"
-echo "   Run benchmarks: python run_comparator.py --operator matmul --test-cases small_square"
-echo "   Framework tests: ./build.sh --test"
-echo
-echo "🛠️ Quick commands:"
-echo "   ./build.sh --test                # Run all tests"
-echo "   ./build.sh --benchmark           # Run benchmarks"
-if [ "$SKIP_CUDA" = "true" ]; then
-    echo "   ./build.sh cuda                  # Retry CUDA build"
-else
-    echo "   ./build.sh --skip-cuda           # Framework-only mode"
-fi
 
 log_error() {
-    echo -e "${RED}❌ $1${NC}"
+    echo -e "${RED}[FAIL] $1${NC}"
 }
+PROJECT_NAME="Universal Operator Benchmarking Framework"
+BUILD_TYPE="Release"
+JOBS=$(nproc)
+VERBOSE=false
+CLEAN=false
+DEBUG=false
+METHOD="cmake"
+TARGET="all"
+RUN_TESTS=false
+RUN_BENCHMARKS=false
+CHECK_DEPS=false
+SKIP_CUDA=false
+PYTHON_EXECUTABLE="python3"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
 show_help() {
     cat << EOF
@@ -147,22 +145,24 @@ check_dependencies() {
         log_success "Python $PYTHON_VERSION found"
         
         # Check Python development headers
-        if $PYTHON_EXECUTABLE -c "import sysconfig; print(sysconfig.get_path('include'))" 2>/dev/null | xargs -I {} test -f {}/Python.h; then
+        PYTHON_INCLUDE_PATH=$($PYTHON_EXECUTABLE -c "import sysconfig; print(sysconfig.get_path('include'))" 2>/dev/null)
+        if [ -n "$PYTHON_INCLUDE_PATH" ] && [ -f "$PYTHON_INCLUDE_PATH/Python.h" ]; then
             log_success "Python development headers found"
         else
             log_warning "Python development headers not found"
-            log_info "Try: conda install python-dev (conda) or apt-get install python3-dev (Ubuntu)"
+            log_info "Try: conda install python-dev or apt-get install python3-dev"
         fi
         
         # Check PyTorch
-        if $PYTHON_EXECUTABLE -c "import torch; print(f'PyTorch {torch.__version__}')" 2>/dev/null; then
+        if $PYTHON_EXECUTABLE -c "import torch" 2>/dev/null; then
             PYTORCH_VERSION=$($PYTHON_EXECUTABLE -c "import torch; print(torch.__version__)" 2>/dev/null)
             log_success "PyTorch $PYTORCH_VERSION found"
             
-            # Check CUDA
-            if $PYTHON_EXECUTABLE -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
+            # Check CUDA availability
+            CUDA_CHECK_OUTPUT=$($PYTHON_EXECUTABLE -c "import torch; print('CUDA_OK' if torch.cuda.is_available() else 'CUDA_NO')" 2>/dev/null)
+            if [ "$CUDA_CHECK_OUTPUT" = "CUDA_OK" ]; then
                 CUDA_VERSION=$($PYTHON_EXECUTABLE -c "import torch; print(torch.version.cuda)" 2>/dev/null)
-                GPU_NAME=$($PYTHON_EXECUTABLE -c "import torch; print(torch.cuda.get_device_name())" 2>/dev/null)
+                GPU_NAME=$($PYTHON_EXECUTABLE -c "import torch; print(torch.cuda.get_device_name(0))" 2>/dev/null)
                 log_success "CUDA $CUDA_VERSION available"
                 log_success "GPU: $GPU_NAME"
             else
@@ -174,7 +174,7 @@ check_dependencies() {
         fi
         
         # Check NumPy
-        if $PYTHON_EXECUTABLE -c "import numpy; print(f'NumPy {numpy.__version__}')" 2>/dev/null; then
+        if $PYTHON_EXECUTABLE -c "import numpy" 2>/dev/null; then
             NUMPY_VERSION=$($PYTHON_EXECUTABLE -c "import numpy; print(numpy.__version__)" 2>/dev/null)
             log_success "NumPy $NUMPY_VERSION found"
         else
@@ -190,16 +190,16 @@ check_dependencies() {
 }
 
 get_torch_cmake_config() {
-    $PYTHON_EXECUTABLE -c "
+    $PYTHON_EXECUTABLE -c '
 import torch
-from pathlib import Path
-torch_dir = Path(torch.__file__).parent
-cmake_prefix_path = torch_dir / 'share' / 'cmake'
-if cmake_prefix_path.exists():
-    print(str(cmake_prefix_path))
+import os
+torch_dir = os.path.dirname(torch.__file__)
+cmake_prefix_path = os.path.join(torch_dir, "share", "cmake")
+if os.path.exists(cmake_prefix_path):
+    print(cmake_prefix_path)
 else:
-    print(str(torch_dir))
-" 2>/dev/null || echo ""
+    print(torch_dir)
+' 2>/dev/null || echo ""
 }
 
 build_with_cmake() {
@@ -305,7 +305,7 @@ build_with_cmake() {
         elif [ $BUILD_EXIT_CODE -ne 0 ]; then
             log_error "Build failed with exit code $BUILD_EXIT_CODE"
             log_info "Run with --debug to see detailed output"
-            echo "$BUILD_OUTPUT" | grep -E "(error|Error|failed|Failed)" | head -10
+            echo "$BUILD_OUTPUT" | grep -E "error|Error|failed|Failed" | head -10
             return 1
         fi
     fi
@@ -357,7 +357,7 @@ build_with_python() {
         if [ $BUILD_EXIT_CODE -ne 0 ]; then
             log_error "Python build failed with exit code $BUILD_EXIT_CODE"
             log_info "Run with --debug to see detailed output"
-            echo "$BUILD_OUTPUT" | grep -E "(error|Error|failed|Failed)" | head -10
+            echo "$BUILD_OUTPUT" | grep -E "error|Error|failed|Failed" | head -10
             return 1
         fi
     fi
@@ -413,9 +413,16 @@ clean_all() {
     rm -rf build/
     
     # Python build artifacts
+    log_info "Removing Python build artifacts..."
     rm -rf dist/ *.egg-info/ *.so
     find . -name "*.pyc" -delete
+    find . -name "*.pyo" -delete
     find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+    
+    # Additional Python cache cleanup (more thorough)
+    log_info "Removing all Python cache directories..."
+    find . -name "__pycache__" -type d -print0 | xargs -0 rm -rf 2>/dev/null || true
+    find . -name "*.py[co]" -delete 2>/dev/null || true
     
     # Temporary files
     rm -rf tmp/ temp/ *.tmp
@@ -542,7 +549,7 @@ done
 # Main execution
 cd "$(dirname "$0")"
 
-echo "🚀 $PROJECT_NAME Build Script"
+echo "[INFO] $PROJECT_NAME Build Script"
 echo "============================================================"
 
 # Check dependencies
@@ -557,7 +564,7 @@ if [ "$CHECK_DEPS" = "true" ]; then
 fi
 
 build_framework_mode() {
-    log_info "Building in framework mode (optimized for compatibility)..."
+    log_info "Building in framework mode - optimized for compatibility..."
     echo "============================================================"
     
     if [ "$DEBUG" = "true" ]; then
@@ -589,50 +596,50 @@ build_framework_mode() {
         
         # Check key framework files
         if [ -f "run_comparator.py" ]; then
-            echo "  ✅ Main comparator tool found"
+            echo "  [PASS] Main comparator tool found"
         else
-            echo "  ❌ Main comparator tool missing"
+            echo "  [FAIL] Main comparator tool missing"
         fi
         
         if [ -d "src/framework" ]; then
-            echo "  ✅ Framework source directory found"
+            echo "  [PASS] Framework source directory found"
         else
-            echo "  ❌ Framework source directory missing"
+            echo "  [FAIL] Framework source directory missing"
         fi
         
         if [ -d "src/operators" ]; then
-            echo "  ✅ Operators directory found"
+            echo "  [PASS] Operators directory found"
         else
-            echo "  ❌ Operators directory missing"
+            echo "  [FAIL] Operators directory missing"
         fi
         
         # Check Python imports
-        if $PYTHON_EXECUTABLE -c "import torch; print('  ✅ PyTorch import successful')" 2>/dev/null; then
-            :
+        if $PYTHON_EXECUTABLE -c "import torch" 2>/dev/null; then
+            echo "  [PASS] PyTorch import successful"
         else
-            echo "  ❌ PyTorch import failed"
+            echo "  [FAIL] PyTorch import failed"
         fi
         
-        if $PYTHON_EXECUTABLE -c "import numpy; print('  ✅ NumPy import successful')" 2>/dev/null; then
-            :
+        if $PYTHON_EXECUTABLE -c "import numpy" 2>/dev/null; then
+            echo "  [PASS] NumPy import successful"
         else
-            echo "  ❌ NumPy import failed"
+            echo "  [FAIL] NumPy import failed"
         fi
         
         # Test framework functionality
         log_info "Debug mode: Testing framework functionality..."
-        if $PYTHON_EXECUTABLE -c "
+        if $PYTHON_EXECUTABLE -c '
 import sys
-sys.path.insert(0, '.')
+sys.path.insert(0, ".")
 try:
     from src.framework.operator_framework import BaseOperator, OperatorType
-    print('  ✅ Framework core imports successful')
+    print("  [PASS] Framework core imports successful")
 except Exception as e:
-    print(f'  ❌ Framework core import failed: {e}')
-" 2>/dev/null; then
+    print("  [FAIL] Framework core import failed:", str(e))
+' 2>/dev/null; then
             :
         else
-            echo "  ❌ Framework core import test failed"
+            echo "  [FAIL] Framework core import test failed"
         fi
     fi
     
@@ -703,12 +710,12 @@ fi
 echo
 log_success "Framework build completed successfully!"
 echo
-echo "🎯 Ready to use:"
+echo "[INFO] Ready to use:"
 echo "   List operators: python run_comparator.py --list-operators"
 echo "   Run benchmarks: python run_comparator.py --operator matmul --test-cases small_square"
 echo "   Framework tests: ./build.sh --test"
 echo
-echo "� Quick commands:"
+echo "[INFO] Quick commands:"
 echo "   ./build.sh --test                # Run all tests"
 echo "   ./build.sh --benchmark           # Run benchmarks"
 echo "   ./build.sh --force-cuda          # Attempt CUDA build (advanced)"

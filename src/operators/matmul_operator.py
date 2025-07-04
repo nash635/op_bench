@@ -145,7 +145,7 @@ class MatMulOperator(BaseOperator):
             )
             
         except ImportError:
-            print("ℹ️  Framework running in compatibility mode (PyTorch + CuPy backends available)")
+            print("[INFO] Framework running in compatibility mode (PyTorch + CuPy backends available)")
             
         # CuPy implementations
         try:
@@ -165,7 +165,7 @@ class MatMulOperator(BaseOperator):
             )
             
         except ImportError:
-            print("⚠️  CuPy not available")
+            print("[WARN] CuPy not available")
             
         # Set reference implementation
         self.set_reference_implementation("pytorch_mm")
