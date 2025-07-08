@@ -221,24 +221,15 @@ build_with_cmake() {
     
     mkdir -p "$BUILD_DIR"
     
-    # CMake configuration
-    CMAKE_ARGS=(
-        "cmake" ".."
-        "-DCMAKE_BUILD_TYPE=$BUILD_TYPE"
-        "-DCMAKE_CXX_STANDARD=17"
-        "-DCMAKE_CXX_STANDARD_REQUIRED=ON"
-        "-Wno-dev"
-        "-DCMAKE_WARN_DEPRECATED=OFF"
-    )
+    # CMake configuration - build command arguments
+    CMAKE_BASE_ARGS="cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -Wno-dev -DCMAKE_WARN_DEPRECATED=OFF"
     
     # Use conda compiler if available, otherwise use system compiler
     if command -v x86_64-conda-linux-gnu-g++ &> /dev/null; then
-        CMAKE_ARGS+=("-DCMAKE_CXX_COMPILER=x86_64-conda-linux-gnu-g++")
-        CMAKE_ARGS+=("-DCMAKE_C_COMPILER=x86_64-conda-linux-gnu-gcc")
+        CMAKE_COMPILER_ARGS="-DCMAKE_CXX_COMPILER=x86_64-conda-linux-gnu-g++ -DCMAKE_C_COMPILER=x86_64-conda-linux-gnu-gcc"
         log_info "Using conda GCC toolchain"
     else
-        CMAKE_ARGS+=("-DCMAKE_CXX_COMPILER=/usr/bin/g++")
-        CMAKE_ARGS+=("-DCMAKE_C_COMPILER=/usr/bin/gcc")
+        CMAKE_COMPILER_ARGS="-DCMAKE_CXX_COMPILER=/usr/bin/g++ -DCMAKE_C_COMPILER=/usr/bin/gcc"
         log_info "Using system GCC toolchain"
     fi
     
@@ -249,20 +240,27 @@ build_with_cmake() {
     # Add PyTorch CMake path
     TORCH_CMAKE_PATH=$(get_torch_cmake_config)
     if [ -n "$TORCH_CMAKE_PATH" ]; then
-        CMAKE_ARGS+=("-DCMAKE_PREFIX_PATH=$TORCH_CMAKE_PATH")
+        CMAKE_PREFIX_ARGS="-DCMAKE_PREFIX_PATH=$TORCH_CMAKE_PATH"
+    else
+        CMAKE_PREFIX_ARGS=""
     fi
     
     if [ "$VERBOSE" = "true" ]; then
-        CMAKE_ARGS+=("-DCMAKE_VERBOSE_MAKEFILE=ON")
+        CMAKE_VERBOSE_ARGS="-DCMAKE_VERBOSE_MAKEFILE=ON"
+    else
+        CMAKE_VERBOSE_ARGS=""
     fi
+    
+    # Combine all CMake arguments
+    CMAKE_FULL_ARGS="$CMAKE_BASE_ARGS $CMAKE_COMPILER_ARGS $CMAKE_PREFIX_ARGS $CMAKE_VERBOSE_ARGS"
     
     # Configure
     log_info "Configuring CMake..."
     if [ "$DEBUG" = "true" ]; then
         log_info "Debug mode: showing CMake configuration output"
-        (cd "$BUILD_DIR" && "${CMAKE_ARGS[@]}")
+        (cd "$BUILD_DIR" && $CMAKE_FULL_ARGS)
     else
-        if ! (cd "$BUILD_DIR" && "${CMAKE_ARGS[@]}" &>/dev/null); then
+        if ! (cd "$BUILD_DIR" && $CMAKE_FULL_ARGS &>/dev/null); then
             log_error "CMake configuration failed"
             log_info "Run with --debug to see detailed output"
             return 1
@@ -271,20 +269,26 @@ build_with_cmake() {
     
     # Build
     log_info "Building..."
-    BUILD_ARGS=("cmake" "--build" "." "--parallel" "$JOBS")
+    BUILD_BASE_ARGS="cmake --build . --parallel $JOBS"
     
     if [ "$TARGET" != "all" ]; then
-        BUILD_ARGS+=("--target" "$TARGET")
+        BUILD_TARGET_ARGS="--target $TARGET"
+    else
+        BUILD_TARGET_ARGS=""
     fi
     
     if [ "$VERBOSE" = "true" ]; then
-        BUILD_ARGS+=("--verbose")
+        BUILD_VERBOSE_ARGS="--verbose"
+    else
+        BUILD_VERBOSE_ARGS=""
     fi
+    
+    BUILD_FULL_ARGS="$BUILD_BASE_ARGS $BUILD_TARGET_ARGS $BUILD_VERBOSE_ARGS"
     
     if [ "$DEBUG" = "true" ]; then
         log_info "Debug mode: showing build output"
         # Use timeout to prevent hanging
-        if ! timeout 300 bash -c "cd '$BUILD_DIR' && ${BUILD_ARGS[*]}"; then
+        if ! timeout 300 bash -c "cd '$BUILD_DIR' && $BUILD_FULL_ARGS"; then
             EXIT_CODE=$?
             if [ $EXIT_CODE -eq 124 ]; then
                 log_error "Build timed out after 300 seconds"
@@ -295,7 +299,7 @@ build_with_cmake() {
             return 1
         fi
     else
-        BUILD_OUTPUT=$(timeout 300 bash -c "cd '$BUILD_DIR' && ${BUILD_ARGS[*]}" 2>&1)
+        BUILD_OUTPUT=$(timeout 300 bash -c "cd '$BUILD_DIR' && $BUILD_FULL_ARGS" 2>&1)
         BUILD_EXIT_CODE=$?
         
         if [ $BUILD_EXIT_CODE -eq 124 ]; then
@@ -338,20 +342,24 @@ build_with_python() {
         find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
     fi
     
-    BUILD_ARGS=("$PYTHON_EXECUTABLE" "setup.py" "build_ext" "--inplace")
+    BUILD_BASE_CMD="$PYTHON_EXECUTABLE setup.py build_ext --inplace"
     
     if [ "$VERBOSE" = "true" ]; then
-        BUILD_ARGS+=("--verbose")
+        BUILD_VERBOSE_ARG="--verbose"
+    else
+        BUILD_VERBOSE_ARG=""
     fi
+    
+    BUILD_FULL_CMD="$BUILD_BASE_CMD $BUILD_VERBOSE_ARG"
     
     if [ "$DEBUG" = "true" ]; then
         log_info "Debug mode: showing Python build output"
-        if ! "${BUILD_ARGS[@]}"; then
+        if ! $BUILD_FULL_CMD; then
             log_error "Python build failed"
             return 1
         fi
     else
-        BUILD_OUTPUT=$("${BUILD_ARGS[@]}" 2>&1)
+        BUILD_OUTPUT=$($BUILD_FULL_CMD 2>&1)
         BUILD_EXIT_CODE=$?
         
         if [ $BUILD_EXIT_CODE -ne 0 ]; then
