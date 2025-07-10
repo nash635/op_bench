@@ -52,7 +52,12 @@ class UniversalOperatorComparator:
             'matmul': OperatorType.MATMUL,
             'vector_add': OperatorType.VECTOR_ADD,
             'relu': OperatorType.ACTIVATION,
-            'rmsnorm': OperatorType.ELEMENT_WISE
+            'rmsnorm': OperatorType.ELEMENT_WISE,
+            'rdma_stress': OperatorType.RDMA_STRESS,
+            'tcp_bandwidth': OperatorType.TCP_BANDWIDTH,
+            'rdma_bandwidth': OperatorType.RDMA_BANDWIDTH,
+            'pcie_bandwidth': OperatorType.PCIE_BANDWIDTH,
+            'network_stress': OperatorType.NETWORK_STRESS
         }
         
         if operator_type not in type_mapping:
@@ -70,7 +75,12 @@ class UniversalOperatorComparator:
             'matmul': OperatorType.MATMUL,
             'vector_add': OperatorType.VECTOR_ADD,
             'relu': OperatorType.ACTIVATION,
-            'rmsnorm': OperatorType.ELEMENT_WISE
+            'rmsnorm': OperatorType.ELEMENT_WISE,
+            'rdma_stress': OperatorType.RDMA_STRESS,
+            'tcp_bandwidth': OperatorType.TCP_BANDWIDTH,
+            'rdma_bandwidth': OperatorType.RDMA_BANDWIDTH,
+            'pcie_bandwidth': OperatorType.PCIE_BANDWIDTH,
+            'network_stress': OperatorType.NETWORK_STRESS
         }
         
         if operator_type not in type_mapping:
@@ -92,7 +102,12 @@ class UniversalOperatorComparator:
             'matmul': OperatorType.MATMUL,
             'vector_add': OperatorType.VECTOR_ADD,
             'relu': OperatorType.ACTIVATION,
-            'rmsnorm': OperatorType.ELEMENT_WISE
+            'rmsnorm': OperatorType.ELEMENT_WISE,
+            'rdma_stress': OperatorType.RDMA_STRESS,
+            'tcp_bandwidth': OperatorType.TCP_BANDWIDTH,
+            'rdma_bandwidth': OperatorType.RDMA_BANDWIDTH,
+            'pcie_bandwidth': OperatorType.PCIE_BANDWIDTH,
+            'network_stress': OperatorType.NETWORK_STRESS
         }
         
         if operator_type not in type_mapping:
@@ -141,9 +156,9 @@ class UniversalOperatorComparator:
             # Display results
             for result in case_results:
                 if result.available and result.correct:
-                    print(f"  [PASS] {result.name}: {result.avg_time_ms:.3f}ms, {result.gflops:.1f} GFLOPS")
+                    print(f"  [PASS] {result.name}: {result.avg_time_ms:.3f}ms, {result.display_metric}")
                 elif result.available and not result.correct:
-                    print(f"  [FAIL] {result.name}: {result.avg_time_ms:.3f}ms, {result.gflops:.1f} GFLOPS (INCORRECT)")
+                    print(f"  [FAIL] {result.name}: {result.avg_time_ms:.3f}ms, {result.display_metric} (INCORRECT)")
                 else:
                     print(f"  [FAIL] {result.name}: Not available - {result.error}")
                     
@@ -165,14 +180,28 @@ class UniversalOperatorComparator:
         
         for test_case_name, case_results in results.items():
             report += f"\n### Test Case: {test_case_name}\n\n"
-            report += "| Implementation | Available | Correct | Avg Time (ms) | GFLOPS | Min Time (ms) | Std Dev (ms) |\n"
-            report += "|----------------|-----------|---------|---------------|--------|---------------|---------------|\n"
+            
+            # Check if this is a network test to determine appropriate headers
+            is_network_test = any(result.is_network_test for result in case_results if result.available)
+            
+            if is_network_test:
+                report += "| Implementation | Available | Correct | Avg Time (ms) | Bandwidth (Gbps) | Min Time (ms) | Std Dev (ms) |\n"
+                report += "|----------------|-----------|---------|---------------|------------------|---------------|---------------|\n"
+            else:
+                report += "| Implementation | Available | Correct | Avg Time (ms) | GFLOPS | Min Time (ms) | Std Dev (ms) |\n"
+                report += "|----------------|-----------|---------|---------------|--------|---------------|---------------|\n"
             
             for result in case_results:
                 if result.available:
                     available_str = "[PASS]" if result.correct else "[WARN]"
                     correct_str = "[PASS]" if result.correct else "[FAIL]"
-                    report += f"| {result.name} | {available_str} | {correct_str} | {result.avg_time_ms:.3f} | {result.gflops:.1f} | {result.min_time_ms:.3f} | {result.std_time_ms:.3f} |\n"
+                    
+                    if is_network_test:
+                        metric_value = f"{result.bandwidth_gbps:.3f}"
+                    else:
+                        metric_value = f"{result.gflops:.1f}"
+                    
+                    report += f"| {result.name} | {available_str} | {correct_str} | {result.avg_time_ms:.3f} | {metric_value} | {result.min_time_ms:.3f} | {result.std_time_ms:.3f} |\n"
                 else:
                     report += f"| {result.name} | [FAIL] | N/A | N/A | N/A | N/A | N/A |\n"
                     
@@ -202,8 +231,14 @@ class UniversalOperatorComparator:
                     'std_time_ms': result.std_time_ms,
                     'min_time_ms': result.min_time_ms,
                     'max_time_ms': result.max_time_ms,
-                    'gflops': result.gflops
                 }
+                
+                # Add appropriate performance metric
+                if result.is_network_test:
+                    json_data['bandwidth_gbps'] = result.bandwidth_gbps
+                else:
+                    json_data['gflops'] = result.gflops
+                
                 if result.error:
                     json_data['error'] = result.error
                 json_results[test_case_name].append(json_data)
@@ -236,7 +271,13 @@ class UniversalOperatorComparator:
             print("[WARN] No successful implementations found for chart generation")
             return []
         
-        # GFLOPS chart
+        # Check if this is a network test
+        is_network_test = any(
+            any(result.is_network_test for result in case_results if result.available and result.correct)
+            for case_results in results.values()
+        )
+        
+        # Performance metric chart (GFLOPS for compute, Gbps for network)
         fig, ax = plt.subplots(figsize=(12, 8))
         
         x = np.arange(len(test_cases))
@@ -250,18 +291,29 @@ class UniversalOperatorComparator:
             x_offset = 0
         
         for i, impl in enumerate(implementations):
-            gflops_data = []
+            metric_data = []
             for test_case in test_cases:
                 case_results = results[test_case]
                 impl_result = next((r for r in case_results if r.name == impl and r.available and r.correct), None)
-                gflops_data.append(impl_result.gflops if impl_result else 0)
+                if impl_result:
+                    metric_value = impl_result.bandwidth_gbps if is_network_test else impl_result.gflops
+                    metric_data.append(metric_value)
+                else:
+                    metric_data.append(0)
                 
             bar_positions = x + i * width + x_offset
-            ax.bar(bar_positions, gflops_data, width, label=impl, alpha=0.8)
+            ax.bar(bar_positions, metric_data, width, label=impl, alpha=0.8)
             
         ax.set_xlabel('Test Cases')
-        ax.set_ylabel('GFLOPS')
-        ax.set_title(f'{operator_type.upper()} Performance Comparison (GFLOPS)')
+        
+        if is_network_test:
+            ax.set_ylabel('Bandwidth (Gbps)')
+            ax.set_title(f'{operator_type.upper()} Performance Comparison (Bandwidth)')
+            chart_filename = f"{output_prefix}_bandwidth_{timestamp}.png"
+        else:
+            ax.set_ylabel('GFLOPS')
+            ax.set_title(f'{operator_type.upper()} Performance Comparison (GFLOPS)')
+            chart_filename = f"{output_prefix}_gflops_{timestamp}.png"
         
         # Adjust x-axis settings based on number of test cases
         if len(test_cases) == 1:
@@ -275,15 +327,14 @@ class UniversalOperatorComparator:
         ax.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        gflops_file = f"{output_prefix}_gflops_{timestamp}.png"
-        plt.savefig(gflops_file, dpi=300, bbox_inches='tight')
+        plt.savefig(chart_filename, dpi=300, bbox_inches='tight')
         plt.close()
-        chart_files.append(gflops_file)
+        chart_files.append(chart_filename)
         
         # Execution time chart
         fig, ax = plt.subplots(figsize=(12, 8))
         
-        # Use the same width and offset settings as GFLOPS chart
+        # Use the same width and offset settings as performance chart
         for i, impl in enumerate(implementations):
             times_data = []
             for test_case in test_cases:
@@ -462,7 +513,8 @@ class UniversalOperatorComparator:
         return chart_files
 def main():
     parser = argparse.ArgumentParser(description='Universal Operator Comparison Tool')
-    parser.add_argument('--operator', choices=['matmul', 'vector_add', 'relu', 'rmsnorm'],
+    parser.add_argument('--operator', choices=['matmul', 'vector_add', 'relu', 'rmsnorm', 'rdma_stress', 
+                                               'tcp_bandwidth', 'rdma_bandwidth', 'pcie_bandwidth', 'network_stress'],
                        help='Operator type to test')
     parser.add_argument('--test-cases', nargs='+', 
                        help='Test cases to run (default: all)')
@@ -516,6 +568,37 @@ def main():
         comparator.register_operator(RMSNormOperator())
     except ImportError as e:
         print(f"[WARN] RMSNorm operator not available: {e}")
+    
+    try:
+        from operators.rdma_stress_operator import RDMAStressOperator
+        comparator.register_operator(RDMAStressOperator())
+    except ImportError as e:
+        print(f"[WARN] RDMA Stress operator not available: {e}")
+    
+    # Register network performance operators
+    try:
+        from operators.tcp_bandwidth_operator import TCPBandwidthOperator
+        comparator.register_operator(TCPBandwidthOperator())
+    except ImportError as e:
+        print(f"[WARN] TCP Bandwidth operator not available: {e}")
+    
+    try:
+        from operators.rdma_bandwidth_operator import RDMABandwidthOperator
+        comparator.register_operator(RDMABandwidthOperator())
+    except ImportError as e:
+        print(f"[WARN] RDMA Bandwidth operator not available: {e}")
+    
+    try:
+        from operators.pcie_bandwidth_operator import PCIeBandwidthOperator
+        comparator.register_operator(PCIeBandwidthOperator())
+    except ImportError as e:
+        print(f"[WARN] PCIe Bandwidth operator not available: {e}")
+    
+    try:
+        from operators.network_stress_operator import NetworkStressOperator
+        comparator.register_operator(NetworkStressOperator())
+    except ImportError as e:
+        print(f"[WARN] Network Stress operator not available: {e}")
     
     # Handle list commands first
     if args.list_operators:

@@ -23,7 +23,7 @@ A flexible, extensible framework for implementing and comparing different operat
 
 # Utility commands
 ./build.sh clean                    # Clean build artifacts
-./build.sh clean-all               # Clean build artifacts and experimental output
+./build.sh clean-all               # Clean build artifacts and all output (including custom --output-dir results)
 ./build.sh test-framework           # Test framework functionality
 ./build.sh check-deps               # Check dependencies only
 ```
@@ -54,6 +54,31 @@ python run_comparator.py --operator matmul --test-cases small_square --output-di
 
 # Compare accuracy differences between implementations (using PyTorch CPU as reference)
 python run_comparator.py --operator matmul --test-cases small_square --output-dir result --plot --output-diff
+```
+
+### 4. Network Performance Testing
+
+The framework now includes comprehensive network performance testing capabilities:
+
+**Note**: Network tests can take longer than compute tests (2-30 seconds per test case depending on configuration). For quicker testing, use `--warmup 0 --runs 1` parameters.
+
+```bash
+# Run all network tests
+python run_network_tests.py --all
+
+# Run specific network tests
+python run_network_tests.py --tcp          # TCP bandwidth tests
+python run_network_tests.py --rdma         # RDMA bandwidth tests
+python run_network_tests.py --pcie         # PCIe bandwidth tests
+python run_network_tests.py --stress       # Network stress tests
+
+# Test individual network operators (note: network tests may take some time)
+python run_comparator.py --operator tcp_bandwidth --test-cases tcp_bandwidth_64KB --warmup 1 --runs 3
+python run_comparator.py --operator pcie_bandwidth --test-cases pcie_bandwidth_1MB --warmup 1 --runs 3
+
+# For quicker testing, use fewer runs and smaller buffers
+python run_comparator.py --operator tcp_bandwidth --test-cases tcp_bandwidth_64KB --warmup 0 --runs 1
+python run_comparator.py --operator pcie_bandwidth --test-cases pcie_bandwidth_1MB --warmup 0 --runs 1
 ```
 
 ## Framework Features
@@ -103,6 +128,13 @@ python run_comparator.py --operator vector_add --test-cases small_tensor
 python run_comparator.py --operator relu --test-cases small_tensor
 ```
 
+### 5. Test Network Operators
+
+```bash
+# Test all network operators
+python test_network_operators.py
+```
+
 ## Profiling
 
 ```bash
@@ -112,8 +144,12 @@ python run_comparator.py --operator relu --test-cases small_tensor
 # Nsight Compute profiling
 ./scripts/run_ncu_profiling.sh
 
-# Alternative profiling methods
-python tests/profiling_alternative.py
+# PyTorch-based profiling (when Nsight tools require special permissions)
+python tools/profiling_pytorch.py
+
+# Direct profiling tools usage
+python tools/ncu_profiler.py --operator matmul --test-case small_square
+python tools/profile_nsight.py --operator matmul --test-case small_square
 ```
 
 ## Requirements
@@ -146,3 +182,34 @@ See [FRAMEWORK_GUIDE.md](docs/FRAMEWORK_GUIDE.md) for detailed instructions.
 ## License
 
 This project is licensed under the Apache 2.0 License - see the LICENSE file for details.
+
+## Supported Operators
+
+### Compute Operators
+- **MatMul**: Matrix multiplication with CPU, PyTorch, custom CUDA implementations
+- **VectorAdd**: Element-wise vector addition with CPU, PyTorch, custom CUDA implementations
+- **ReLU**: Rectified Linear Unit activation with CPU, PyTorch, custom CUDA implementations
+- **RMSNorm**: Root Mean Square Normalization with fused/unfused implementations
+
+### Network Performance Operators
+- **TCP Bandwidth**: TCP network bandwidth testing with multiple implementations
+  - Client-server testing
+  - iperf3 integration
+  - netcat testing
+- **RDMA Bandwidth**: RDMA network bandwidth testing
+  - RDMA perftest integration
+  - Ping-pong latency testing
+  - Multi-QP testing
+- **PCIe Bandwidth**: PCIe/GPU memory bandwidth testing
+  - GPU memory copy operations
+  - CUDA bandwidth testing
+  - GPU peer-to-peer testing
+  - NVLink testing
+- **Network Stress**: Comprehensive network stress testing
+  - Combined TCP/RDMA/PCIe testing
+  - Concurrent connection testing
+  - System-wide network benchmarking
+
+## Tools Overview
+
+For detailed information about the tools available in the `tools/` directory, refer to the [Tools README](tools/README.md).

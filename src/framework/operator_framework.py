@@ -22,6 +22,11 @@ class OperatorType(Enum):
     ACTIVATION = "activation"
     REDUCTION = "reduction"
     ELEMENT_WISE = "element_wise"
+    RDMA_STRESS = "rdma_stress"
+    TCP_BANDWIDTH = "tcp_bandwidth"
+    RDMA_BANDWIDTH = "rdma_bandwidth"
+    PCIE_BANDWIDTH = "pcie_bandwidth"
+    NETWORK_STRESS = "network_stress"
 
 @dataclass
 class OperatorTestCase:
@@ -47,6 +52,30 @@ class ImplementationResult:
     additional_metrics: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     result: Optional[torch.Tensor] = None
+    
+    @property
+    def is_network_test(self) -> bool:
+        """Check if this is a network performance test"""
+        return any(keyword in self.impl_id.lower() for keyword in ['tcp', 'rdma', 'pcie', 'bandwidth', 'network'])
+    
+    @property
+    def bandwidth_gbps(self) -> float:
+        """Get bandwidth in Gbps for network tests"""
+        if self.is_network_test and self.result is not None:
+            try:
+                # For network tests, the result tensor contains bandwidth in Gbps
+                return float(self.result.item())
+            except:
+                return 0.0
+        return 0.0
+    
+    @property
+    def display_metric(self) -> str:
+        """Get the appropriate display metric string"""
+        if self.is_network_test:
+            return f"{self.bandwidth_gbps:.3f} Gbps"
+        else:
+            return f"{self.gflops:.1f} GFLOPS"
 
 class BaseOperator(ABC):
     """Base class for all operators"""
@@ -93,6 +122,20 @@ class BaseOperator(ABC):
         else:
             raise ValueError(f"Implementation {impl_id} not found")
             
+    def get_reference_implementation(self) -> str:
+        """Get the reference implementation ID"""
+        if self.reference_impl is None:
+            # 如果没有设置reference，返回第一个可用的实现
+            if self.implementations:
+                return list(self.implementations.keys())[0]
+            else:
+                raise ValueError("No implementations available")
+        return self.reference_impl
+    
+    def has_reference_implementation(self) -> bool:
+        """Check if a reference implementation is set"""
+        return self.reference_impl is not None and self.reference_impl in self.implementations
+    
     def verify_correctness(self, result: torch.Tensor, reference: torch.Tensor, 
                          tolerance: float = 1e-4) -> bool:
         """Verify if result matches reference"""
@@ -215,3 +258,29 @@ class BaseOperator(ABC):
                 results.append(result)
                 
         return results
+    
+    def run_implementation(self, impl_id: str, inputs: List[torch.Tensor], 
+                          params: Optional[Dict[str, Any]] = None) -> torch.Tensor:
+        """Run a specific implementation with given inputs and parameters"""
+        if impl_id not in self.implementations:
+            raise ValueError(f"Implementation '{impl_id}' not found. Available: {list(self.implementations.keys())}")
+        
+        impl_func = self.implementations[impl_id]['function']
+        if params is None:
+            params = {}
+        
+        return impl_func(inputs, params)
+    
+    def get_available_implementations(self) -> List[str]:
+        """Get list of available implementation IDs"""
+        return list(self.implementations.keys())
+    
+    def get_implementation_info(self, impl_id: str) -> Dict[str, str]:
+        """Get information about a specific implementation"""
+        if impl_id not in self.implementations:
+            raise ValueError(f"Implementation '{impl_id}' not found")
+        return {
+            'id': impl_id,
+            'display_name': self.implementations[impl_id]['display_name'],
+            'description': self.implementations[impl_id]['description']
+        }

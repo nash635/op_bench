@@ -260,7 +260,7 @@ for _ in range({iterations}):
                     print("\nSolutions:")
                     print("1. Use sudo: sudo python ncu_profiler.py ...")
                     print("2. Set system option: echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf")
-                    print("3. Use alternative: python profiling_alternative.py ...")
+                    print("3. Use PyTorch profiler: python profiling_pytorch.py ...")
                     print("="*60)
                 return None
                 
@@ -390,7 +390,7 @@ echo "To view in GUI: ncu --import <profile_file>"
             f.write("1. Run `./analyze_ncu_profiles.sh` for quick analysis\\n")
             f.write("2. Open profile files in Nsight Compute GUI for detailed view\\n")
             f.write("3. Compare kernel performance using the CSV exports\\n")
-            f.write("4. Use profiling_alternative.py for PyTorch Profiler analysis\\n")
+            f.write("4. Use profiling_pytorch.py for PyTorch Profiler analysis\\n")
             
         print(f"[PASS] Generated summary report: {report_path}")
 
@@ -432,14 +432,14 @@ def main():
         print("\\n[FAIL] 当前 GPU 不支持 Nsight Compute!")
         print("建议使用替代方案:")
         print("  - Nsight Systems: python profile_nsight.py --mode nsys")
-        print("  - PyTorch Profiler: python profiling_alternative.py")
+        print("  - PyTorch Profiler: python profiling_pytorch.py")
         return 1
     
     # Check permissions
     if not args.sudo and not profiler.check_ncu_permissions():
         print("[WARN] NCU permission check failed!")
         print("You may need to use --sudo or configure system permissions.")
-        print("Alternatively, use: python profiling_alternative.py")
+        print("Alternatively, use: python profiling_pytorch.py")
         
         response = input("Continue anyway? [y/N]: ")
         if response.lower() != 'y':
@@ -463,7 +463,7 @@ def main():
         print("\\nTroubleshooting:")
         print("1. Check CUDA installation: nvcc --version")
         print("2. Try with sudo: python ncu_profiler.py --sudo ...")
-        print("3. Use alternative: python profiling_alternative.py")
+        print("3. Use PyTorch profiler: python profiling_pytorch.py")
         return 1
     
     # Generate analysis tools
