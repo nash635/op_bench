@@ -447,6 +447,47 @@ clean_all() {
     rm -f profile_*.json profile_*.md profile_*.txt
     rm -f analysis_*.json analysis_*.md analysis_*.txt
     
+    # Output directories (commonly used with --output-dir)
+    log_info "Removing output directories..."
+    # Common output directory names
+    for output_dir in "my_results" "results" "output" "benchmarks" "comparison" "experiments" "profiling_results" "test_results" "analysis_output"; do
+        if [ -d "$output_dir" ]; then
+            log_info "Removing output directory: $output_dir"
+            rm -rf "$output_dir"
+        fi
+    done
+    
+    # Look for directories containing comparison/benchmark files
+    log_info "Scanning for additional result directories..."
+    found_additional=false
+    for dir in */; do
+        if [ -d "$dir" ]; then
+            # Skip common non-result directories
+            case "$dir" in
+                ".git/"|"src/"|"tests/"|"docs/"|"scripts/"|"tools/"|"build/"|".pytest_cache/"|"__pycache__/"|"*.egg-info/")
+                    continue
+                    ;;
+            esac
+            
+            # Check if directory contains comparison or benchmark files
+            if ls "$dir"comparison_*.* >/dev/null 2>&1 || \
+               ls "$dir"benchmark_*.* >/dev/null 2>&1 || \
+               ls "$dir"results_*.* >/dev/null 2>&1 || \
+               ls "$dir"performance_*.* >/dev/null 2>&1 || \
+               ls "$dir"*_gflops_*.png >/dev/null 2>&1 || \
+               ls "$dir"*_times_*.png >/dev/null 2>&1 || \
+               ls "$dir"*_bandwidth_*.png >/dev/null 2>&1; then
+                log_info "Found result files in directory: $dir - removing..."
+                rm -rf "$dir"
+                found_additional=true
+            fi
+        fi
+    done
+    
+    if [ "$found_additional" = true ]; then
+        log_success "Additional result directories cleaned!"
+    fi
+    
     # Image and visualization files
     rm -f *.png *.jpg *.jpeg *.svg *.pdf *.gif *.bmp *.tiff
     
