@@ -15,8 +15,11 @@ import time
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 
-# Add src directory to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+# Add both src and project root directory to Python path
+project_root = os.path.dirname(__file__)
+sys.path.insert(0, project_root)  # For tools module
+sys.path.insert(0, os.path.join(project_root, 'src'))  # For framework and operators modules
+sys.path.insert(0, os.path.join(project_root, 'src'))  # For framework and operators modules
 
 @dataclass
 class NetworkDevice:
