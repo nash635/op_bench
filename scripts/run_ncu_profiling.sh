@@ -59,7 +59,7 @@ else
     
     # 使用替代方案
     ALT_OUTPUT_DIR="pytorch_profiler_$(date +%Y%m%d_%H%M%S)"
-    python profiling_alternative.py --sizes $SIZES --output $ALT_OUTPUT_DIR --force-pytorch-profiler
+    python profiling_pytorch.py --sizes $SIZES --output $ALT_OUTPUT_DIR --force-pytorch-profiler
     
     ALT_EXIT_CODE=$?
     
