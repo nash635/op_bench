@@ -78,6 +78,7 @@ COMMANDS:
     test            Run tests
     benchmark       Run benchmarks
     check-deps      Check dependencies only
+    install-deps    Check and install missing dependencies
     test-framework  Test framework without CUDA extension
     cuda            Force CUDA extension build attempt
     help            Show this help
@@ -103,6 +104,7 @@ EXAMPLES:
     $0 --debug                  # Build with detailed output
     $0 test-framework           # Test framework without CUDA
     $0 check-deps               # Check dependencies only
+    $0 install-deps             # Install missing dependencies automatically
 
 NOTE: CUDA extension build is attempted by default.
       Use --skip-cuda for framework-only mode if CUDA build fails.
@@ -447,47 +449,6 @@ clean_all() {
     rm -f profile_*.json profile_*.md profile_*.txt
     rm -f analysis_*.json analysis_*.md analysis_*.txt
     
-    # Output directories (commonly used with --output-dir)
-    log_info "Removing output directories..."
-    # Common output directory names
-    for output_dir in "my_results" "results" "output" "benchmarks" "comparison" "experiments" "profiling_results" "test_results" "analysis_output"; do
-        if [ -d "$output_dir" ]; then
-            log_info "Removing output directory: $output_dir"
-            rm -rf "$output_dir"
-        fi
-    done
-    
-    # Look for directories containing comparison/benchmark files
-    log_info "Scanning for additional result directories..."
-    found_additional=false
-    for dir in */; do
-        if [ -d "$dir" ]; then
-            # Skip common non-result directories
-            case "$dir" in
-                ".git/"|"src/"|"tests/"|"docs/"|"scripts/"|"tools/"|"build/"|".pytest_cache/"|"__pycache__/"|"*.egg-info/")
-                    continue
-                    ;;
-            esac
-            
-            # Check if directory contains comparison or benchmark files
-            if ls "$dir"comparison_*.* >/dev/null 2>&1 || \
-               ls "$dir"benchmark_*.* >/dev/null 2>&1 || \
-               ls "$dir"results_*.* >/dev/null 2>&1 || \
-               ls "$dir"performance_*.* >/dev/null 2>&1 || \
-               ls "$dir"*_gflops_*.png >/dev/null 2>&1 || \
-               ls "$dir"*_times_*.png >/dev/null 2>&1 || \
-               ls "$dir"*_bandwidth_*.png >/dev/null 2>&1; then
-                log_info "Found result files in directory: $dir - removing..."
-                rm -rf "$dir"
-                found_additional=true
-            fi
-        fi
-    done
-    
-    if [ "$found_additional" = true ]; then
-        log_success "Additional result directories cleaned!"
-    fi
-    
     # Image and visualization files
     rm -f *.png *.jpg *.jpeg *.svg *.pdf *.gif *.bmp *.tiff
     
@@ -508,6 +469,298 @@ clean_all() {
     log_success "Complete cleanup finished!"
 }
 
+detect_os() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS=$NAME
+        VER=$VERSION_ID
+        # Handle ID_LIKE for compatibility
+        if [ -n "$ID_LIKE" ]; then
+            OS_LIKE=$ID_LIKE
+        else
+            OS_LIKE=""
+        fi
+    elif type lsb_release >/dev/null 2>&1; then
+        OS=$(lsb_release -si)
+        VER=$(lsb_release -sr)
+        OS_LIKE=""
+    elif [ -f /etc/redhat-release ]; then
+        OS="Red Hat Enterprise Linux"
+        VER=$(cat /etc/redhat-release | sed -n 's/.*release \([0-9.]*\).*/\1/p')
+        OS_LIKE="rhel"
+    elif [ -f /etc/debian_version ]; then
+        OS="Debian"
+        VER=$(cat /etc/debian_version)
+        OS_LIKE="debian"
+    else
+        OS=$(uname -s)
+        VER=$(uname -r)
+        OS_LIKE=""
+    fi
+}
+
+get_package_manager() {
+    # Determine package manager based on OS
+    if command -v dnf &> /dev/null; then
+        PKG_MANAGER="dnf"
+    elif command -v yum &> /dev/null; then
+        PKG_MANAGER="yum"
+    elif command -v apt-get &> /dev/null; then
+        PKG_MANAGER="apt-get"
+    elif command -v zypper &> /dev/null; then
+        PKG_MANAGER="zypper"
+    elif command -v pacman &> /dev/null; then
+        PKG_MANAGER="pacman"
+    else
+        PKG_MANAGER=""
+    fi
+}
+
+is_debian_like() {
+    case $OS in
+        *"Ubuntu"*|*"Debian"*) return 0 ;;
+    esac
+    case $OS_LIKE in
+        *debian*|*ubuntu*) return 0 ;;
+    esac
+    return 1
+}
+
+is_rhel_like() {
+    case $OS in
+        *"CentOS"*|*"Red Hat"*|*"Rocky"*|*"AlmaLinux"*|*"Fedora"*|*"Alibaba"*) return 0 ;;
+    esac
+    case $OS_LIKE in
+        *rhel*|*centos*|*fedora*) return 0 ;;
+    esac
+    return 1
+}
+
+check_sudo() {
+    if [ "$EUID" -ne 0 ]; then
+        if command -v sudo &> /dev/null; then
+            SUDO="sudo"
+        else
+            log_error "This script requires root privileges or sudo access to install packages"
+            log_info "Please run as root or install sudo"
+            return 1
+        fi
+    else
+        SUDO=""
+    fi
+    return 0
+}
+
+install_dependencies() {
+    log_info "Checking and installing missing dependencies..."
+    echo "============================================================"
+    
+    # Check if we have sudo access
+    if ! check_sudo; then
+        return 1
+    fi
+    
+    # Detect OS and package manager
+    detect_os
+    get_package_manager
+    log_info "Detected OS: $OS $VER"
+    if [ -n "$PKG_MANAGER" ]; then
+        log_info "Package manager: $PKG_MANAGER"
+    else
+        log_warning "No supported package manager found"
+    fi
+    
+    MISSING_PACKAGES=()
+    CONDA_PACKAGES=()
+    
+    # Check system tools
+    log_info "Checking system dependencies..."
+    
+    # CMake
+    if ! command -v cmake &> /dev/null; then
+        log_warning "CMake not found, will install"
+        MISSING_PACKAGES+=("cmake")
+    fi
+    
+    # Build tools
+    if ! command -v g++ &> /dev/null; then
+        log_warning "g++ not found, will install"
+        if is_debian_like; then
+            MISSING_PACKAGES+=("build-essential")
+        elif is_rhel_like; then
+            MISSING_PACKAGES+=("gcc-c++")
+        fi
+    fi
+    
+    # Python development headers
+    PYTHON_INCLUDE_PATH=$($PYTHON_EXECUTABLE -c "import sysconfig; print(sysconfig.get_path('include'))" 2>/dev/null)
+    if [ -z "$PYTHON_INCLUDE_PATH" ] || [ ! -f "$PYTHON_INCLUDE_PATH/Python.h" ]; then
+        log_warning "Python development headers not found, will install"
+        if is_debian_like; then
+            MISSING_PACKAGES+=("python3-dev")
+        elif is_rhel_like; then
+            MISSING_PACKAGES+=("python3-devel")
+        fi
+    fi
+    
+    # Network testing tools
+    if ! command -v iperf3 &> /dev/null; then
+        log_warning "iperf3 not found, will install"
+        MISSING_PACKAGES+=("iperf3")
+    fi
+    
+    if ! command -v nc &> /dev/null && ! command -v netcat &> /dev/null; then
+        log_warning "netcat not found, will install"
+        if is_debian_like; then
+            MISSING_PACKAGES+=("netcat-openbsd")
+        elif is_rhel_like; then
+            MISSING_PACKAGES+=("nmap-ncat")
+        fi
+    fi
+    
+    # RDMA tools
+    if ! command -v ibv_devices &> /dev/null; then
+        log_warning "RDMA tools not found, will install"
+        if is_debian_like; then
+            MISSING_PACKAGES+=("infiniband-diags" "libibverbs-dev" "librdmacm-dev")
+        elif is_rhel_like; then
+            MISSING_PACKAGES+=("infiniband-diags" "libibverbs-devel" "librdmacm-devel")
+        fi
+    fi
+    
+    # RDMA perftest tools
+    if ! command -v ib_read_bw &> /dev/null; then
+        log_warning "RDMA perftest tools not found, will install"
+        MISSING_PACKAGES+=("perftest")
+    fi
+    
+    # PCI utilities
+    if ! command -v lspci &> /dev/null; then
+        log_warning "PCI utilities not found, will install"
+        MISSING_PACKAGES+=("pciutils")
+    fi
+    
+    # NUMA utilities
+    if ! command -v numactl &> /dev/null; then
+        log_warning "NUMA utilities not found, will install"
+        MISSING_PACKAGES+=("numactl")
+    fi
+    
+    # Install system packages
+    if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
+        log_info "Installing system packages: ${MISSING_PACKAGES[*]}"
+        
+        if [ -z "$PKG_MANAGER" ]; then
+            log_error "No supported package manager found"
+            log_info "Please install the following packages manually:"
+            for pkg in "${MISSING_PACKAGES[@]}"; do
+                echo "  - $pkg"
+            done
+            return 1
+        fi
+        
+        case $PKG_MANAGER in
+            apt-get)
+                log_info "Updating package lists..."
+                $SUDO apt-get update
+                log_info "Installing packages..."
+                $SUDO apt-get install -y "${MISSING_PACKAGES[@]}"
+                ;;
+            yum)
+                log_info "Installing packages..."
+                $SUDO yum install -y "${MISSING_PACKAGES[@]}"
+                ;;
+            dnf)
+                log_info "Installing packages..."
+                $SUDO dnf install -y "${MISSING_PACKAGES[@]}"
+                ;;
+            zypper)
+                log_info "Installing packages..."
+                $SUDO zypper install -y "${MISSING_PACKAGES[@]}"
+                ;;
+            pacman)
+                log_info "Installing packages..."
+                $SUDO pacman -S --noconfirm "${MISSING_PACKAGES[@]}"
+                ;;
+            *)
+                log_error "Unsupported package manager: $PKG_MANAGER"
+                log_info "Please install the following packages manually:"
+                for pkg in "${MISSING_PACKAGES[@]}"; do
+                    echo "  - $pkg"
+                done
+                return 1
+                ;;
+        esac
+    else
+        log_success "All system dependencies are already installed"
+    fi
+    
+    # Check Python packages
+    log_info "Checking Python dependencies..."
+    
+    # Check PyTorch
+    if ! $PYTHON_EXECUTABLE -c "import torch" 2>/dev/null; then
+        log_warning "PyTorch not found, will install via conda/pip"
+        CONDA_PACKAGES+=("pytorch")
+    fi
+    
+    # Check NumPy
+    if ! $PYTHON_EXECUTABLE -c "import numpy" 2>/dev/null; then
+        log_warning "NumPy not found, will install via conda/pip"
+        CONDA_PACKAGES+=("numpy")
+    fi
+    
+    # Check matplotlib (optional)
+    if ! $PYTHON_EXECUTABLE -c "import matplotlib" 2>/dev/null; then
+        log_warning "Matplotlib not found, will install via conda/pip"
+        CONDA_PACKAGES+=("matplotlib")
+    fi
+    
+    # Check seaborn (optional)
+    if ! $PYTHON_EXECUTABLE -c "import seaborn" 2>/dev/null; then
+        log_warning "Seaborn not found, will install via conda/pip"
+        CONDA_PACKAGES+=("seaborn")
+    fi
+    
+    # Install Python packages
+    if [ ${#CONDA_PACKAGES[@]} -gt 0 ]; then
+        log_info "Installing Python packages: ${CONDA_PACKAGES[*]}"
+        
+        # Try conda first, then pip
+        if command -v conda &> /dev/null; then
+            log_info "Using conda to install Python packages..."
+            conda install -y "${CONDA_PACKAGES[@]}"
+        elif command -v pip &> /dev/null || command -v pip3 &> /dev/null; then
+            log_info "Using pip to install Python packages..."
+            PIP_CMD="pip"
+            if command -v pip3 &> /dev/null; then
+                PIP_CMD="pip3"
+            fi
+            $PIP_CMD install "${CONDA_PACKAGES[@]}"
+        else
+            log_error "Neither conda nor pip found, cannot install Python packages"
+            log_info "Please install the following Python packages manually:"
+            for pkg in "${CONDA_PACKAGES[@]}"; do
+                echo "  - $pkg"
+            done
+            return 1
+        fi
+    else
+        log_success "All Python dependencies are already installed"
+    fi
+    
+    log_success "Dependency installation completed!"
+    
+    # Verify installation
+    log_info "Verifying installation..."
+    if check_dependencies; then
+        log_success "All dependencies are now available!"
+        return 0
+    else
+        log_warning "Some dependencies may still be missing, please check manually"
+        return 1
+    fi
+}
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -583,6 +836,10 @@ while [[ $# -gt 0 ]]; do
             CHECK_DEPS=true
             shift
             ;;
+        install-deps)
+            install_dependencies
+            exit $?
+            ;;
         help|--help|-h)
             show_help
             exit 0
@@ -604,6 +861,7 @@ echo "============================================================"
 # Check dependencies
 if ! check_dependencies; then
     log_error "Dependency check failed"
+    log_info "Try running './build.sh install-deps' to install missing dependencies"
     exit 1
 fi
 

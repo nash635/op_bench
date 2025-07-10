@@ -11,6 +11,10 @@ A flexible, extensible framework for implementing and comparing different operat
 # Simple build (attempts CUDA extension - recommended)
 ./build.sh
 
+# Check and install missing dependencies automatically
+./build.sh install-deps             # Install dependencies and exit
+./build.sh check-deps               # Check dependencies only
+
 # Build with advanced options
 ./build.sh --test                   # Build and run tests
 ./build.sh --benchmark              # Build and run benchmarks
@@ -25,8 +29,13 @@ A flexible, extensible framework for implementing and comparing different operat
 ./build.sh clean                    # Clean build artifacts
 ./build.sh clean-all               # Clean build artifacts and all output (including custom --output-dir results)
 ./build.sh test-framework           # Test framework functionality
-./build.sh check-deps               # Check dependencies only
 ```
+
+**Dependency Management**: The framework now includes automatic dependency detection and installation:
+- `./build.sh install-deps` - Automatically detects and installs missing system packages and Python libraries
+- Supports multiple Linux distributions (Ubuntu, CentOS, RHEL, Alibaba Cloud Linux, etc.)
+- Installs network testing tools (iperf3, RDMA tools, etc.) for comprehensive network benchmarking
+- Handles both system packages (via yum/dnf/apt-get) and Python packages (via conda/pip)
 
 ### 2. List Available Operators
 
@@ -154,10 +163,37 @@ python tools/profile_nsight.py --operator matmul --test-case small_square
 
 ## Requirements
 
-- Python 3.8+
-- PyTorch with CUDA support
-- NVIDIA GPU with CUDA capability
-- Optional: CuPy, matplotlib, seaborn
+### System Dependencies
+- **Operating System**: Linux (Ubuntu, CentOS, RHEL, Alibaba Cloud Linux, etc.)
+- **Compiler**: GCC with C++17 support
+- **Build Tools**: CMake 3.10+
+- **Python**: Python 3.8+ with development headers
+
+### Python Dependencies
+- **PyTorch** with CUDA support (required)
+- **NumPy** (required)
+- **Matplotlib** (optional, for visualization)
+- **Seaborn** (optional, for enhanced visualization)
+
+### Network Testing Dependencies (Optional)
+- **iperf3**: For TCP bandwidth testing
+- **RDMA tools**: InfiniBand verbs and perftest for RDMA testing
+  - `infiniband-diags`
+  - `libibverbs-dev` (Ubuntu) / `libibverbs-devel` (RHEL/CentOS)
+  - `librdmacm-dev` (Ubuntu) / `librdmacm-devel` (RHEL/CentOS)
+  - `perftest`
+- **System utilities**: PCI utilities, NUMA control
+  - `pciutils`
+  - `numactl`
+- **Network utilities**: netcat for network testing
+  - `netcat-openbsd` (Ubuntu) / `nmap-ncat` (RHEL/CentOS)
+
+### Hardware Requirements
+- **NVIDIA GPU** with CUDA capability (for CUDA extensions)
+- **InfiniBand/RoCE network** (for RDMA testing, optional)
+
+### Automatic Installation
+Use `./build.sh install-deps` to automatically detect and install missing dependencies on supported systems.
 
 ## Performance
 
@@ -213,3 +249,56 @@ This project is licensed under the Apache 2.0 License - see the LICENSE file for
 ## Tools Overview
 
 For detailed information about the tools available in the `tools/` directory, refer to the [Tools README](tools/README.md).
+
+## Troubleshooting
+
+### Dependency Issues
+
+If you encounter dependency-related errors:
+
+1. **Check dependencies first**:
+   ```bash
+   ./build.sh check-deps
+   ```
+
+2. **Install missing dependencies automatically**:
+   ```bash
+   ./build.sh install-deps
+   ```
+
+3. **Manual dependency installation** (if automatic installation fails):
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get update
+   sudo apt-get install build-essential cmake python3-dev iperf3 infiniband-diags libibverbs-dev librdmacm-dev perftest pciutils numactl netcat-openbsd
+   
+   # CentOS/RHEL/Alibaba Cloud Linux
+   sudo yum install gcc-c++ cmake python3-devel iperf3 infiniband-diags libibverbs-devel librdmacm-devel perftest pciutils numactl nmap-ncat
+   # Or for newer versions:
+   sudo dnf install gcc-c++ cmake python3-devel iperf3 infiniband-diags libibverbs-devel librdmacm-devel perftest pciutils numactl nmap-ncat
+   ```
+
+### Network Testing Issues
+
+- **RDMA tools not found**: Install InfiniBand utilities or skip RDMA tests
+- **No RDMA devices**: Network tests will automatically skip RDMA-specific tests
+- **Permission issues**: Some network tests may require sudo privileges
+- **Firewall blocking**: Ensure network ports are accessible for bandwidth testing
+
+### Build Issues
+
+- **CUDA extension build fails**: Use `./build.sh --skip-cuda` for framework-only mode
+- **Missing Python headers**: Install python3-dev (Ubuntu) or python3-devel (RHEL/CentOS)
+- **Compiler not found**: Install build-essential (Ubuntu) or gcc-c++ (RHEL/CentOS)
+- **Out of disk space**: Clean up space and retry, or use `./build.sh clean-all` to free up result files
+
+### Cross-Server Deployment
+
+When deploying to different servers:
+
+1. **Copy the entire project directory** to the target server
+2. **Run dependency check** on the new server: `./build.sh check-deps`
+3. **Install missing dependencies**: `./build.sh install-deps`
+4. **Build the framework**: `./build.sh`
+
+The framework is designed to work across different Linux distributions and server configurations.
