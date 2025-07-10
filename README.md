@@ -157,9 +157,15 @@ python test_network_operators.py
 python tools/profiling_pytorch.py
 
 # Direct profiling tools usage
-python tools/ncu_profiler.py --operator matmul --test-case small_square
-python tools/profile_nsight.py --operator matmul --test-case small_square
+python tools/ncu_profiler.py --sizes 1024 --kernels cuda_template_16 cuda_template_32
+python tools/profile_nsight.py --sizes 512 1024 --kernels cuda_basic cuda_shared --mode both
+
+# For older CUDA kernel profiling (legacy format)
+python tools/ncu_profiler.py --sizes 512 1024 --metrics all
+python tools/profile_nsight.py --output my_profiles --iterations 50 --sizes 1024 2048
 ```
+
+**Note**: Nsight Compute (NCU) requires GPU compute capability 7.0+ (Volta architecture and newer). For older GPUs like Tesla P100, use Nsight Systems or PyTorch Profiler instead.
 
 ## Requirements
 
@@ -300,5 +306,18 @@ When deploying to different servers:
 2. **Run dependency check** on the new server: `./build.sh check-deps`
 3. **Install missing dependencies**: `./build.sh install-deps`
 4. **Build the framework**: `./build.sh`
+
+**Important**: If you encounter `ModuleNotFoundError: No module named 'tools.operator_comparator_tool'`, ensure that `tools/__init__.py` exists:
+
+```bash
+# Check if __init__.py exists
+ls -la tools/__init__.py
+
+# If missing, create it
+echo '"""Tools package for Universal Operator Benchmarking Framework"""' > tools/__init__.py
+
+# Verify the fix works
+python run_comparator.py --list-operators
+```
 
 The framework is designed to work across different Linux distributions and server configurations.
