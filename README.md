@@ -306,18 +306,3 @@ When deploying to different servers:
 2. **Run dependency check** on the new server: `./build.sh check-deps`
 3. **Install missing dependencies**: `./build.sh install-deps`
 4. **Build the framework**: `./build.sh`
-
-**Important**: If you encounter `ModuleNotFoundError: No module named 'tools.operator_comparator_tool'`, ensure that `tools/__init__.py` exists:
-
-```bash
-# Check if __init__.py exists
-ls -la tools/__init__.py
-
-# If missing, create it
-echo '"""Tools package for Universal Operator Benchmarking Framework"""' > tools/__init__.py
-
-# Verify the fix works
-python run_comparator.py --list-operators
-```
-
-The framework is designed to work across different Linux distributions and server configurations.
