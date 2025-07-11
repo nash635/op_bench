@@ -1,0 +1,75 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+*.pyd
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyTorch JIT compilation cache
+.torch_compile/
+
+# CUDA build files
+*.o
+*.cu.o
+*.cpp.o
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Profiling results
+*.prof
+*.ncu-rep
+*.nsys-rep
+*.sqlite
+*.qdrep
+
+# Test results and logs
+*.log
+test_results/
+profiling_results/
+comparison_*.md
+comparison_*.json
+accuracy_*.json
+ncu_profiles_*/
+
+# Temporary files
+*.tmp
+*.temp
+matplotlib_cache_*/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
