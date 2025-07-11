@@ -19,6 +19,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 # Visualization libraries
 try:
+    # Set matplotlib cache directory to a writable location
+    import os
+    import tempfile
+    if not os.path.exists(os.path.expanduser('~/.cache/matplotlib')):
+        try:
+            os.makedirs(os.path.expanduser('~/.cache/matplotlib'), exist_ok=True)
+        except (OSError, PermissionError):
+            # If we can't create the default cache directory, use a temp directory
+            temp_dir = tempfile.mkdtemp(prefix='matplotlib_cache_')
+            os.environ['MPLCONFIGDIR'] = temp_dir
+    
+    import matplotlib
+    matplotlib.use('Agg')  # Use non-interactive backend
     import matplotlib.pyplot as plt
     import seaborn as sns
     plt.style.use('default')
@@ -27,6 +40,9 @@ try:
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
     print("[WARN] Matplotlib not available, skipping chart generation")
+except Exception as e:
+    MATPLOTLIB_AVAILABLE = False
+    print(f"[WARN] Matplotlib not available: {e}, skipping chart generation")
 
 from framework.operator_framework import BaseOperator, OperatorType, OperatorTestCase, ImplementationResult
 
