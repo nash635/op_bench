@@ -21,6 +21,7 @@ class MatMulOperator(BaseOperator):
     
     def __init__(self):
         super().__init__(OperatorType.MATMUL)
+        self.matmul_cuda_ext = None  # Store the loaded CUDA extension
         self._setup_implementations()
         
     def get_test_cases(self) -> List[OperatorTestCase]:
@@ -121,8 +122,46 @@ class MatMulOperator(BaseOperator):
         )
         
         # Try to load custom CUDA implementations
+        cuda_extension_loaded = False
         try:
+            # First try direct import
             import matmul_cuda_ext
+            self.matmul_cuda_ext = matmul_cuda_ext
+            cuda_extension_loaded = True
+            print("[INFO] CUDA extension loaded successfully via direct import")
+        except ImportError:
+            try:
+                # Try to load using torch.utils.cpp_extension.load
+                from torch.utils.cpp_extension import load
+                import os
+                
+                # Get the directory containing CUDA source files
+                cuda_dir = os.path.join(os.path.dirname(__file__), '..', 'cuda')
+                if os.path.exists(cuda_dir):
+                    cuda_sources = [
+                        os.path.join(cuda_dir, 'matmul_cuda_ext.cpp'),
+                        os.path.join(cuda_dir, 'matmul_kernels.cu')
+                    ]
+                    
+                    # Check if source files exist
+                    if all(os.path.exists(src) for src in cuda_sources):
+                        self.matmul_cuda_ext = load(
+                            name='matmul_cuda_ext',
+                            sources=cuda_sources,
+                            extra_cflags=['-O3', '-std=c++17'],
+                            extra_cuda_cflags=['-O3', '--expt-relaxed-constexpr', '-std=c++17'],
+                            verbose=False
+                        )
+                        cuda_extension_loaded = True
+                        print("[INFO] CUDA extension loaded successfully via torch.utils.cpp_extension.load")
+                    else:
+                        print(f"[WARN] CUDA source files not found in {cuda_dir}")
+                else:
+                    print(f"[WARN] CUDA directory not found: {cuda_dir}")
+            except Exception as e:
+                print(f"[WARN] Failed to load CUDA extension: {e}")
+        
+        if cuda_extension_loaded:
             self.register_implementation(
                 "cuda_basic",
                 self._cuda_basic,
@@ -144,7 +183,27 @@ class MatMulOperator(BaseOperator):
                 "CUDA kernel with static shared memory"
             )
             
-        except ImportError:
+            self.register_implementation(
+                "cuda_template_8",
+                self._cuda_template_8,
+                "CUDA Template (8x8)",
+                "CUDA template kernel with 8x8 tile size"
+            )
+            
+            self.register_implementation(
+                "cuda_template_16",
+                self._cuda_template_16,
+                "CUDA Template (16x16)",
+                "CUDA template kernel with 16x16 tile size"
+            )
+            
+            self.register_implementation(
+                "cuda_template_32",
+                self._cuda_template_32,
+                "CUDA Template (32x32)",
+                "CUDA template kernel with 32x32 tile size"
+            )
+        else:
             print("[INFO] Framework running in compatibility mode (PyTorch + CuPy backends available)")
             
         # CuPy implementations
@@ -210,25 +269,61 @@ class MatMulOperator(BaseOperator):
     def _cuda_basic(self, inputs: List[torch.Tensor], params: Dict[str, Any]) -> torch.Tensor:
         """Custom CUDA basic kernel"""
         try:
-            import matmul_cuda_ext
-            return matmul_cuda_ext.matmul_basic(inputs[0], inputs[1])
-        except:
+            if self.matmul_cuda_ext is not None:
+                return self.matmul_cuda_ext.matmul_basic(inputs[0], inputs[1])
+            return None
+        except Exception as e:
+            print(f"Error in cuda_basic: {e}")
             return None
             
     def _cuda_shared(self, inputs: List[torch.Tensor], params: Dict[str, Any]) -> torch.Tensor:
         """Custom CUDA shared memory kernel"""
         try:
-            import matmul_cuda_ext
-            return matmul_cuda_ext.matmul_shared(inputs[0], inputs[1])
-        except:
+            if self.matmul_cuda_ext is not None:
+                return self.matmul_cuda_ext.matmul_shared(inputs[0], inputs[1])
+            return None
+        except Exception as e:
+            print(f"Error in cuda_shared: {e}")
             return None
             
     def _cuda_static_shared(self, inputs: List[torch.Tensor], params: Dict[str, Any]) -> torch.Tensor:
         """Custom CUDA static shared memory kernel"""
         try:
-            import matmul_cuda_ext
-            return matmul_cuda_ext.matmul_static_shared(inputs[0], inputs[1])
-        except:
+            if self.matmul_cuda_ext is not None:
+                return self.matmul_cuda_ext.matmul_static_shared(inputs[0], inputs[1])
+            return None
+        except Exception as e:
+            print(f"Error in cuda_static_shared: {e}")
+            return None
+    
+    def _cuda_template_8(self, inputs: List[torch.Tensor], params: Dict[str, Any]) -> torch.Tensor:
+        """Custom CUDA template kernel with 8x8 tile size"""
+        try:
+            if self.matmul_cuda_ext is not None:
+                return self.matmul_cuda_ext.matmul_template(inputs[0], inputs[1], 8)
+            return None
+        except Exception as e:
+            print(f"Error in cuda_template_8: {e}")
+            return None
+    
+    def _cuda_template_16(self, inputs: List[torch.Tensor], params: Dict[str, Any]) -> torch.Tensor:
+        """Custom CUDA template kernel with 16x16 tile size"""
+        try:
+            if self.matmul_cuda_ext is not None:
+                return self.matmul_cuda_ext.matmul_template(inputs[0], inputs[1], 16)
+            return None
+        except Exception as e:
+            print(f"Error in cuda_template_16: {e}")
+            return None
+    
+    def _cuda_template_32(self, inputs: List[torch.Tensor], params: Dict[str, Any]) -> torch.Tensor:
+        """Custom CUDA template kernel with 32x32 tile size"""
+        try:
+            if self.matmul_cuda_ext is not None:
+                return self.matmul_cuda_ext.matmul_template(inputs[0], inputs[1], 32)
+            return None
+        except Exception as e:
+            print(f"Error in cuda_template_32: {e}")
             return None
             
     def _cupy_dot(self, inputs: List[torch.Tensor], params: Dict[str, Any]) -> torch.Tensor:

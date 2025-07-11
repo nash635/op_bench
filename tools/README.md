@@ -4,30 +4,41 @@ This directory contains tools for comparing and profiling operators within the f
 
 ## Core Tools
 
-### 1. Operator Comparator
+### 1. Operator Comparator ⭐ (主要工具)
 - **File**: `operator_comparator_tool.py`
-- **Functionality**: A command-line tool to run benchmarks and compare the performance and output of different operator implementations.
-- **Usage**: Used for performance analysis, accuracy verification, and generating comparison plots.
+- **Functionality**: 主要的性能对比工具，支持多种算子实现的性能测试和精度验证
+- **Usage**: 用于性能分析、精度验证和生成对比图表
 - **Example**:
   ```bash
-  python tools/operator_comparator_tool.py --operator matmul --test-cases small_square --plot
+  python run_comparator.py --operator matmul --test-cases small_square --plot
   ```
 
 ### 2. Nsight Compute Profiler
-- **File**: `ncu_profiler.py`
-- **Functionality**: A Python script to automate profiling of CUDA kernels using NVIDIA's Nsight Compute (`ncu`). It provides detailed performance metrics for individual kernels.
-- **Usage**: Ideal for in-depth kernel optimization and identifying performance bottlenecks.
+- **File**: `ncu_profiler.py` 
+- **Functionality**: 使用 NVIDIA Nsight Compute 进行详细的 CUDA kernel 性能分析
+- **Usage**: 深度内核优化和性能瓶颈识别
 - **Example**:
   ```bash
-  python tools/ncu_profiler.py --operator matmul --test-case "matmul_1024x1024x1024"
+  python tools/ncu_profiler.py --sizes 1024 --kernels cuda_template_16
   ```
 
-### 3. Nsight Systems Profiler
+### 3. Comprehensive Nsight Profiler
 - **File**: `profile_nsight.py`
-- **Functionality**: A Python script to automate system-wide performance analysis using NVIDIA's Nsight Systems (`nsys`). It captures interactions between CPU, GPU, and system memory.
-- **Usage**: Best for understanding the overall application timeline and identifying system-level issues.
+- **Functionality**: 同时支持 Nsight Systems 和 Nsight Compute 的综合分析工具
+- **Usage**: 系统级性能分析和应用时间线分析
 - **Example**:
   ```bash
+  python tools/profile_nsight.py --operator matmul --test-case large_square
+  ```
+
+### 4. PyTorch Profiler (权限友好)
+- **File**: `profiling_pytorch.py`
+- **Functionality**: 当 Nsight 工具权限不足时的替代分析方案
+- **Usage**: 无需特殊权限的性能分析
+- **Example**:
+  ```bash
+  python tools/profiling_pytorch.py --sizes 1024 --output results
+  ```
   python tools/profile_nsight.py --operator matmul --test-case "matmul_1024x1024x1024"
   ```
 
