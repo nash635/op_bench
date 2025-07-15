@@ -169,12 +169,10 @@ class UniversalOperatorComparator:
                             print(f"  [WARN] Failed to collect output for {impl_name}: {e}")
                             output_results[test_case.name][impl_name] = None
             
-            # Display results
+            # Display results - Pure performance mode only
             for result in case_results:
-                if result.available and result.correct:
-                    print(f"  [PASS] {result.name}: {result.avg_time_ms:.3f}ms, {result.display_metric}")
-                elif result.available and not result.correct:
-                    print(f"  [FAIL] {result.name}: {result.avg_time_ms:.3f}ms, {result.display_metric} (INCORRECT)")
+                if result.available:
+                    print(f"  [PERF] {result.name}: {result.avg_time_ms:.3f}ms, {result.display_metric}")
                 else:
                     print(f"  [FAIL] {result.name}: Not available - {result.error}")
                     
@@ -197,29 +195,29 @@ class UniversalOperatorComparator:
         for test_case_name, case_results in results.items():
             report += f"\n### Test Case: {test_case_name}\n\n"
             
-            # Check if this is a network test to determine appropriate headers
+            # Performance-only table headers
             is_network_test = any(result.is_network_test for result in case_results if result.available)
             
             if is_network_test:
-                report += "| Implementation | Available | Correct | Avg Time (ms) | Bandwidth (Gbps) | Min Time (ms) | Std Dev (ms) |\n"
-                report += "|----------------|-----------|---------|---------------|------------------|---------------|---------------|\n"
+                report += "| Implementation | Available | Avg Time (ms) | Bandwidth (Gbps) | Min Time (ms) | Std Dev (ms) |\n"
+                report += "|----------------|-----------|---------------|------------------|---------------|---------------|\n"
             else:
-                report += "| Implementation | Available | Correct | Avg Time (ms) | GFLOPS | Min Time (ms) | Std Dev (ms) |\n"
-                report += "|----------------|-----------|---------|---------------|--------|---------------|---------------|\n"
+                report += "| Implementation | Available | Avg Time (ms) | GFLOPS | Min Time (ms) | Std Dev (ms) |\n"
+                report += "|----------------|-----------|---------------|--------|---------------|---------------|\n"
             
             for result in case_results:
                 if result.available:
-                    available_str = "[PASS]" if result.correct else "[WARN]"
-                    correct_str = "[PASS]" if result.correct else "[FAIL]"
+                    available_str = "✓"
                     
                     if is_network_test:
                         metric_value = f"{result.bandwidth_gbps:.3f}"
                     else:
                         metric_value = f"{result.gflops:.1f}"
                     
-                    report += f"| {result.name} | {available_str} | {correct_str} | {result.avg_time_ms:.3f} | {metric_value} | {result.min_time_ms:.3f} | {result.std_time_ms:.3f} |\n"
+                    # Performance-only row without correctness column
+                    report += f"| {result.name} | {available_str} | {result.avg_time_ms:.3f} | {metric_value} | {result.min_time_ms:.3f} | {result.std_time_ms:.3f} |\n"
                 else:
-                    report += f"| {result.name} | [FAIL] | N/A | N/A | N/A | N/A | N/A |\n"
+                    report += f"| {result.name} | ✗ | N/A | N/A | N/A | N/A |\n"
                     
             report += "\n"
             
@@ -548,6 +546,8 @@ def main():
                        help='Generate performance comparison charts')
     parser.add_argument('--output-diff', action='store_true',
                        help='Generate accuracy difference analysis (using CPU as reference)')
+    parser.add_argument('--accuracy-only', action='store_true',
+                       help='Run only accuracy comparison (no performance testing)')
     parser.add_argument('--list-operators', action='store_true',
                        help='List all available operators')
     parser.add_argument('--list-implementations', action='store_true',
@@ -659,6 +659,61 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     
     # Run comparison
+    if args.accuracy_only:
+        print("Running accuracy comparison only...")
+        
+        # Map operator name to type
+        type_mapping = {
+            'matmul': OperatorType.MATMUL,
+            'vector_add': OperatorType.VECTOR_ADD,
+            'relu': OperatorType.ACTIVATION,
+            'rmsnorm': OperatorType.ELEMENT_WISE,
+            'rdma_stress': OperatorType.RDMA_STRESS,
+            'tcp_bandwidth': OperatorType.TCP_BANDWIDTH,
+            'rdma_bandwidth': OperatorType.RDMA_BANDWIDTH,
+            'pcie_bandwidth': OperatorType.PCIE_BANDWIDTH,
+            'network_stress': OperatorType.NETWORK_STRESS
+        }
+        
+        if args.operator not in type_mapping:
+            print(f"[FAIL] Unknown operator: {args.operator}")
+            return 1
+            
+        op_type = type_mapping[args.operator]
+        if op_type not in comparator.operators:
+            print(f"[FAIL] Operator {args.operator} not registered")
+            return 1
+            
+        operator = comparator.operators[op_type]
+        test_cases = operator.get_test_cases()
+        if args.test_cases:
+            test_cases = [tc for tc in test_cases if tc.name in args.test_cases]
+        
+        for test_case in test_cases:
+            print(f"\n[INFO] Running accuracy comparison for test case: {test_case.name}")
+            
+            accuracy_results = operator.run_accuracy_comparison(test_case, args.implementations)
+            
+            print(f"\nAccuracy Results for {test_case.name}:")
+            print("-" * 60)
+            
+            # Extract and display baseline info if available
+            baseline_info = accuracy_results.pop('_baseline_info', None)
+            if baseline_info:
+                print(f"📊 Baseline (Reference): {baseline_info['reference_display_name']} ({baseline_info['reference_impl_id']})")
+                print("-" * 60)
+            
+            for impl_id, metrics in accuracy_results.items():
+                status = metrics.get('status', 'UNKNOWN')
+                if status == 'PASS':
+                    print(f"✓ {impl_id}: PASS (tolerance: {metrics.get('passed_tolerance', 'N/A')})")
+                elif status == 'FAIL':
+                    print(f"✗ {impl_id}: FAIL (max_error: {metrics.get('max_error', 'N/A'):.2e})")
+                else:
+                    print(f"? {impl_id}: {status} ({metrics.get('error', 'Unknown error')})")
+        
+        return 0
+    
     results, output_results = comparator.run_comparison(
         args.operator, args.test_cases, args.implementations,
         args.warmup, args.runs, collect_outputs=args.output_diff

@@ -2,7 +2,10 @@
 
 ## Overview
 
-This framework provides a flexible system for implementing and comparing different operator implementations across various backends (PyTorch, CUDA, CuPy, etc.).
+This framework provides a flexible system for implementing and comparing different operator implementations across various backends (PyTorch, CUDA, CuPy, etc.). The framework operates in two distinct modes:
+
+- **Performance Mode**: Pure performance benchmarking focused on speed metrics
+- **Accuracy Mode**: Specialized accuracy verification with detailed error analysis
 
 ## Framework Components
 
@@ -10,17 +13,35 @@ This framework provides a flexible system for implementing and comparing differe
 - `BaseOperator`: Abstract base class for all operators
 - `OperatorType`: Enum defining supported operator types
 - `OperatorTestCase`: Configuration for test cases
-- `ImplementationResult`: Result structure for benchmarks
+- `ImplementationResult`: Result structure for benchmarks (with optional correctness field)
 
 ### 2. Operator Implementations
 - `MatMulOperator`: Matrix multiplication implementations
 - `VectorAddOperator`: Vector addition implementations
+- `ReLUOperator`: ReLU activation implementations
+- `RMSNormOperator`: Root Mean Square Normalization implementations
+- Network operators: TCP, RDMA, PCIe bandwidth testing
 - (Extensible for new operators)
 
 ### 3. Universal Comparator (`operator_comparator_tool.py`)
-- Command-line tool for running comparisons
+- Command-line tool for running performance and accuracy comparisons
+- Two-mode operation: performance benchmarking and accuracy verification
 - Visualization and reporting capabilities
 - Support for multiple operators
+
+## Framework Modes
+
+### Performance Mode (Default)
+- **Purpose**: Pure performance benchmarking
+- **Output**: `[PERF]` status with timing and GFLOPS metrics
+- **Features**: No correctness overhead, focused on speed analysis
+- **Reports**: Performance-only tables without correctness columns
+
+### Accuracy Mode (--accuracy-only)
+- **Purpose**: Dedicated precision verification
+- **Output**: Baseline reference display and tolerance analysis
+- **Features**: Multi-level tolerance testing, error metrics, NaN/Inf detection
+- **Reports**: Detailed accuracy analysis with reference implementation info
 
 ## Adding New Operators
 
@@ -97,35 +118,56 @@ except ImportError as e:
 
 ```bash
 # List available operators
-python operator_comparator_tool.py --list-operators
+python tools/operator_comparator_tool.py --list-operators
 
 # List implementations for an operator
-python operator_comparator_tool.py --list-implementations matmul
+python tools/operator_comparator_tool.py --operator matmul --list-implementations
 
 # List test cases for an operator
-python operator_comparator_tool.py --list-test-cases matmul
-
-# Run comparison for MatMul
-python operator_comparator_tool.py --operator matmul --plot
-
-# Run comparison for VectorAdd
-python operator_comparator_tool.py --operator vector_add --plot
+python tools/operator_comparator_tool.py --operator matmul --list-test-cases
 ```
 
-### Advanced Usage
+### Performance Mode Usage
 
 ```bash
-# Test specific implementations
-python operator_comparator_tool.py \
+# Basic performance comparison
+python tools/operator_comparator_tool.py --operator matmul --test-cases small_square
+
+# Performance comparison with charts
+python tools/operator_comparator_tool.py --operator matmul --test-cases small_square --plot
+
+# Test specific implementations for performance
+python tools/operator_comparator_tool.py \
     --operator matmul \
     --implementations pytorch_mm cuda_basic cuda_shared \
     --plot
 
-# Test specific test cases
-python operator_comparator_tool.py \
+# Test multiple cases for performance analysis
+python tools/operator_comparator_tool.py \
+    --operator matmul \
+    --test-cases small_square medium_square large_square \
+    --plot
+```
+
+### Accuracy Mode Usage
+
+```bash
+# Basic accuracy comparison with baseline display
+python tools/operator_comparator_tool.py --operator matmul --test-cases small_square --accuracy-only
+
+# Accuracy comparison for specific implementations
+python tools/operator_comparator_tool.py \
+    --operator matmul \
+    --test-cases small_square \
+    --implementations pytorch_mm cuda_basic cuda_shared \
+    --accuracy-only
+
+# Test accuracy across multiple test cases
+python tools/operator_comparator_tool.py \
     --operator matmul \
     --test-cases small_square medium_square \
-    --plot
+    --accuracy-only
+```
 
 # Custom output directory
 python operator_comparator_tool.py \

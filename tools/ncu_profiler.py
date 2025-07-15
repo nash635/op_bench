@@ -121,16 +121,46 @@ class NCUProfiler:
     def load_extension(self):
         """Load the CUDA extension."""
         try:
-            self.matmul_cuda = load(
-                name='optimal_matmul_cuda',
-                sources=['matmul_cuda_ext.cpp', 'matmul_kernels.cu'],
-                extra_cflags=['-O3', '-std=c++17'],
-                extra_cuda_cflags=['-O3', '--expt-relaxed-constexpr', '-std=c++17'],
-                verbose=False
-            )
+            # First try direct import (if already built)
+            import matmul_cuda_ext
+            self.matmul_cuda = matmul_cuda_ext
+            print("[INFO] CUDA extension loaded successfully via direct import")
             return True
+        except ImportError:
+            try:
+                # Try JIT compilation with correct paths
+                import os
+                from torch.utils.cpp_extension import load
+                
+                # Get the correct source file paths
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                project_root = os.path.dirname(script_dir)
+                cuda_dir = os.path.join(project_root, 'src', 'cuda')
+                
+                sources = [
+                    os.path.join(cuda_dir, 'matmul_cuda_ext.cpp'),
+                    os.path.join(cuda_dir, 'matmul_kernels.cu')
+                ]
+                
+                # Check if source files exist
+                if not all(os.path.exists(src) for src in sources):
+                    print(f"[FAIL] Source files not found: {sources}")
+                    return False
+                
+                self.matmul_cuda = load(
+                    name='matmul_cuda_ext',
+                    sources=sources,
+                    extra_cflags=['-O3', '-std=c++17'],
+                    extra_cuda_cflags=['-O3', '--expt-relaxed-constexpr', '-std=c++17'],
+                    verbose=False
+                )
+                print("[INFO] CUDA extension loaded successfully via JIT compilation")
+                return True
+            except Exception as e:
+                print(f"[FAIL] Error loading CUDA extension: {e}")
+                return False
         except Exception as e:
-            print(f"Error loading CUDA extension: {e}")
+            print(f"[FAIL] Error loading CUDA extension: {e}")
             return False
     
     def run_kernel(self, kernel_name: str, A: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
@@ -158,16 +188,33 @@ class NCUProfiler:
         M, K, N = matrix_size
         script_content = f'''
 import torch
-from torch.utils.cpp_extension import load
+import os
+import sys
+
+# Add project paths
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+sys.path.insert(0, project_root)
+sys.path.insert(0, os.path.join(project_root, 'src'))
 
 # Load extension
-matmul_cuda = load(
-    name='optimal_matmul_cuda',
-    sources=['matmul_cuda_ext.cpp', 'matmul_kernels.cu'],
-    extra_cflags=['-O3', '-std=c++17'],
-    extra_cuda_cflags=['-O3', '--expt-relaxed-constexpr', '-std=c++17'],
-    verbose=False
-)
+try:
+    import matmul_cuda_ext
+    matmul_cuda = matmul_cuda_ext
+except ImportError:
+    from torch.utils.cpp_extension import load
+    cuda_dir = os.path.join(project_root, 'src', 'cuda')
+    sources = [
+        os.path.join(cuda_dir, 'matmul_cuda_ext.cpp'),
+        os.path.join(cuda_dir, 'matmul_kernels.cu')
+    ]
+    matmul_cuda = load(
+        name='matmul_cuda_ext',
+        sources=sources,
+        extra_cflags=['-O3', '-std=c++17'],
+        extra_cuda_cflags=['-O3', '--expt-relaxed-constexpr', '-std=c++17'],
+        verbose=False
+    )
 
 # Setup
 torch.cuda.empty_cache()
@@ -429,11 +476,44 @@ def main():
     print(f"GPU 兼容性: {gpu_msg}")
     
     if not gpu_compatible:
-        print("\\n[FAIL] 当前 GPU 不支持 Nsight Compute!")
-        print("建议使用替代方案:")
-        print("  - Nsight Systems: python profile_nsight.py --mode nsys")
-        print("  - PyTorch Profiler: python profiling_pytorch.py")
-        return 1
+        print("\\n[WARN] 当前 GPU 不支持 Nsight Compute!")
+        print("自动切换到 PyTorch Profiler...")
+        
+        # Import and use PyTorch profiler as fallback
+        try:
+            import sys
+            import os
+            from pathlib import Path
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            sys.path.insert(0, script_dir)
+            
+            # Import the PyTorch profiler function
+            from profiling_pytorch import run_pytorch_profiler_analysis
+            
+            print(f"\\n[INFO] 使用 PyTorch Profiler 进行性能分析...")
+            print(f"矩阵尺寸: {args.sizes}")
+            
+            # Create output directory
+            output_dir = Path(args.output) if args.output else Path(f"pytorch_profiling_{time.strftime('%Y%m%d_%H%M%S')}")
+            
+            # Run PyTorch profiler with similar parameters
+            run_pytorch_profiler_analysis(args.sizes, output_dir)
+            
+            print("\\n[PASS] PyTorch Profiler 分析完成!")
+            print(f"结果保存在: {output_dir}/")
+            return 0
+                
+        except ImportError as e:
+            print(f"\\n[FAIL] PyTorch Profiler 导入失败: {e}")
+            print("建议使用替代方案:")
+            print("  - 手动运行: python tools/profiling_pytorch.py")
+            print("  - 或使用较新的 GPU (计算能力 7.0+)")
+            return 1
+        except Exception as e:
+            print(f"\\n[FAIL] PyTorch Profiler 运行失败: {e}")
+            print("建议使用替代方案:")
+            print("  - 手动运行: python tools/profiling_pytorch.py")
+            return 1
     
     # Check permissions
     if not args.sudo and not profiler.check_ncu_permissions():
