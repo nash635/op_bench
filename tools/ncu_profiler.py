@@ -17,8 +17,12 @@ import time
 import os
 import sys
 from pathlib import Path
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, TYPE_CHECKING
 import json
+
+# 类型检查时导入 torch，运行时条件导入
+if TYPE_CHECKING:
+    import torch
 
 # 尝试导入 PyTorch，处理 sudo 环境下的库冲突
 try:
@@ -30,6 +34,11 @@ except ImportError as e:
     print("[INFO] This may happen in sudo environments with UCX/UCC conflicts.")
     print("[INFO] Consider using PyTorch profiler instead: python tools/profiling_pytorch.py")
     TORCH_AVAILABLE = False
+    # 创建一个虚拟的 torch 模块用于避免 NameError
+    class MockTorch:
+        class Tensor:
+            pass
+    torch = MockTorch()
     # 仍然允许脚本继续运行，以便显示错误信息和建议
 
 
@@ -187,7 +196,7 @@ class NCUProfiler:
             print(f"[FAIL] Error loading CUDA extension: {e}")
             return False
     
-    def run_kernel(self, kernel_name: str, A: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
+    def run_kernel(self, kernel_name: str, A, B):
         """Run a specific kernel."""
         if kernel_name == 'pytorch_builtin':
             return torch.mm(A, B)
