@@ -19,8 +19,18 @@ import sys
 from pathlib import Path
 from typing import List, Tuple, Dict, Optional
 import json
-import torch
-from torch.utils.cpp_extension import load
+
+# 尝试导入 PyTorch，处理 sudo 环境下的库冲突
+try:
+    import torch
+    from torch.utils.cpp_extension import load
+    TORCH_AVAILABLE = True
+except ImportError as e:
+    print(f"[WARN] PyTorch import failed: {e}")
+    print("[INFO] This may happen in sudo environments with UCX/UCC conflicts.")
+    print("[INFO] Consider using PyTorch profiler instead: python tools/profiling_pytorch.py")
+    TORCH_AVAILABLE = False
+    # 仍然允许脚本继续运行，以便显示错误信息和建议
 
 
 class NCUProfiler:
@@ -30,6 +40,20 @@ class NCUProfiler:
         """Initialize the profiler."""
         self.output_dir = Path(output_dir) if output_dir else Path(f"ncu_profiles_{time.strftime('%Y%m%d_%H%M%S')}")
         self.output_dir.mkdir(exist_ok=True)
+        
+        # Check if PyTorch is available
+        if not TORCH_AVAILABLE:
+            print("[ERROR] PyTorch is not available. Cannot initialize NCU profiler.")
+            print("[INFO] This commonly happens in sudo environments with library conflicts.")
+            print("[INFO] Try one of these alternatives:")
+            print("1. Run without sudo (if permissions allow)")
+            print("2. Fix the environment:")
+            print("   export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH")
+            print("   unset UCX_TLS UCP_TLS")
+            print("3. Use PyTorch profiler: python tools/profiling_pytorch.py")
+            raise RuntimeError("PyTorch import failed - cannot continue with NCU profiling")
+        
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         
         # Available metrics sets
         self.metrics_sets = {
@@ -465,6 +489,27 @@ echo "To view in GUI: ncu --import <profile_file>"
 
 
 def main():
+    # 早期检查 PyTorch 可用性
+    if not TORCH_AVAILABLE:
+        print("\n" + "="*60)
+        print("PYTORCH IMPORT ERROR")
+        print("="*60)
+        print("PyTorch is not available in the current environment.")
+        print("This commonly happens in sudo environments due to library conflicts.")
+        print("\nRECOMMENDED SOLUTIONS:")
+        print("\n1. Try without sudo (configure system permanently):")
+        print("   echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf")
+        print("   sudo rmmod nvidia && sudo modprobe nvidia")
+        print("   python tools/ncu_profiler.py --operator matmul --test-case \"matmul_1024x1024x1024\"")
+        print("\n2. Fix sudo environment:")
+        print("   sudo -E env PATH=$PATH LD_LIBRARY_PATH=$LD_LIBRARY_PATH python tools/ncu_profiler.py ...")
+        print("\n3. Use PyTorch profiler (no sudo required):")
+        print("   python tools/profiling_pytorch.py")
+        print("\n4. Use pre-built NCU commands:")
+        print("   ./fix_ncu_permissions.sh  # for guidance")
+        print("="*60)
+        return 1
+    
     parser = argparse.ArgumentParser(description='Nsight Compute Profiler for CUDA MatMul Kernels')
     
     parser.add_argument('--sizes', type=int, nargs='+', default=[1024],
