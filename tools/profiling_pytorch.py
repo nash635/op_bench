@@ -84,23 +84,62 @@ def run_pytorch_profiler_analysis(matrix_sizes: List[int], output_dir: Path):
     print("="*50)
     
     # 加载扩展
+    matmul_cuda_ext = None
     try:
+        # First try direct import
         import matmul_cuda_ext
-        print("[PASS] CUDA扩展加载成功")
-    except Exception as e:
-        print(f"[FAIL] CUDA扩展加载失败: {e}")
-        return
+        print("[PASS] CUDA扩展加载成功 (直接导入)")
+    except ImportError:
+        try:
+            # Try JIT compilation with correct paths
+            import os
+            import sys
+            from torch.utils.cpp_extension import load
+            
+            # Get the correct source file paths
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(script_dir)
+            cuda_dir = os.path.join(project_root, 'src', 'cuda')
+            
+            sources = [
+                os.path.join(cuda_dir, 'matmul_cuda_ext.cpp'),
+                os.path.join(cuda_dir, 'matmul_kernels.cu')
+            ]
+            
+            # Check if source files exist
+            if not all(os.path.exists(src) for src in sources):
+                print(f"[WARN] CUDA源文件未找到: {sources}")
+                print("[INFO] 将只测试 PyTorch 内置实现")
+            else:
+                matmul_cuda_ext = load(
+                    name='matmul_cuda_ext',
+                    sources=sources,
+                    extra_cflags=['-O3', '-std=c++17'],
+                    extra_cuda_cflags=['-O3', '--expt-relaxed-constexpr', '-std=c++17'],
+                    verbose=False
+                )
+                print("[PASS] CUDA扩展加载成功 (JIT编译)")
+        except Exception as e:
+            print(f"[WARN] CUDA扩展加载失败: {e}")
+            print("[INFO] 将只测试 PyTorch 内置实现")
+            matmul_cuda_ext = None
     
     output_dir.mkdir(exist_ok=True)
     
     # 定义实现
     implementations = {
         'pytorch_builtin': lambda a, b: torch.mm(a, b),
-        'cuda_basic': lambda a, b: matmul_cuda_ext.matmul_basic(a, b),
-        'cuda_shared': lambda a, b: matmul_cuda_ext.matmul_shared(a, b),
-        'cuda_static_shared': lambda a, b: matmul_cuda_ext.matmul_static_shared(a, b),
-        'cuda_template_32': lambda a, b: matmul_cuda_ext.matmul_template(a, b, 32),
     }
+    
+    # Add CUDA implementations if extension is available
+    if matmul_cuda_ext is not None:
+        implementations.update({
+            'cuda_basic': lambda a, b: matmul_cuda_ext.matmul_basic(a, b),
+            'cuda_shared': lambda a, b: matmul_cuda_ext.matmul_shared(a, b),
+            'cuda_static_shared': lambda a, b: matmul_cuda_ext.matmul_static_shared(a, b),
+            'cuda_template_16': lambda a, b: matmul_cuda_ext.matmul_template(a, b, 16),
+            'cuda_template_32': lambda a, b: matmul_cuda_ext.matmul_template(a, b, 32),
+        })
     
     results = {}
     
