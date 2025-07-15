@@ -276,7 +276,9 @@ class UniversalOperatorComparator:
         implementations = set()
         for case_results in results.values():
             for result in case_results:
-                if result.available and result.correct:
+                # In performance mode, result.correct is None, so we check available only
+                # In accuracy mode, we check both available and correct
+                if result.available and (result.correct is True or result.correct is None):
                     implementations.add(result.name)
         implementations = sorted(list(implementations))
         
@@ -287,7 +289,8 @@ class UniversalOperatorComparator:
         
         # Check if this is a network test
         is_network_test = any(
-            any(result.is_network_test for result in case_results if result.available and result.correct)
+            any(result.is_network_test for result in case_results 
+                if result.available and (result.correct is True or result.correct is None))
             for case_results in results.values()
         )
         
@@ -308,7 +311,9 @@ class UniversalOperatorComparator:
             metric_data = []
             for test_case in test_cases:
                 case_results = results[test_case]
-                impl_result = next((r for r in case_results if r.name == impl and r.available and r.correct), None)
+                # Fix: Handle both performance mode (correct=None) and accuracy mode (correct=True/False)
+                impl_result = next((r for r in case_results 
+                                  if r.name == impl and r.available and (r.correct is True or r.correct is None)), None)
                 if impl_result:
                     metric_value = impl_result.bandwidth_gbps if is_network_test else impl_result.gflops
                     metric_data.append(metric_value)
@@ -353,7 +358,9 @@ class UniversalOperatorComparator:
             times_data = []
             for test_case in test_cases:
                 case_results = results[test_case]
-                impl_result = next((r for r in case_results if r.name == impl and r.available and r.correct), None)
+                # Fix: Handle both performance mode (correct=None) and accuracy mode (correct=True/False)
+                impl_result = next((r for r in case_results 
+                                  if r.name == impl and r.available and (r.correct is True or r.correct is None)), None)
                 times_data.append(impl_result.avg_time_ms if impl_result else 0)
                 
             bar_positions = x + i * width + x_offset
