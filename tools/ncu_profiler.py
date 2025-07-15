@@ -299,7 +299,24 @@ for _ in range({iterations}):
                 return str(output_file)
             else:
                 print(f"[FAIL] Failed to profile {kernel_name}")
-                print(f"Error: {result.stderr}")
+                print(f"Return code: {result.returncode}")
+                print(f"Stderr: {result.stderr}")
+                print(f"Stdout: {result.stdout}")
+                
+                # Check if the generated script exists and show its content for debugging
+                script_path = self.output_dir / f"profile_{kernel_name}_{M}x{K}x{N}.py"
+                if script_path.exists():
+                    print(f"Generated script exists: {script_path}")
+                    print("Script content (first 10 lines):")
+                    with open(script_path, 'r') as f:
+                        lines = f.readlines()
+                        for i, line in enumerate(lines[:10]):
+                            print(f"  {i+1}: {line.rstrip()}")
+                        if len(lines) > 10:
+                            print(f"  ... (total {len(lines)} lines)")
+                else:
+                    print(f"Generated script not found: {script_path}")
+                
                 if 'ERR_NVGPUCTRPERM' in result.stderr:
                     print("\n" + "="*60)
                     print("PERMISSION ERROR DETECTED!")
