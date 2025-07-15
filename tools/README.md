@@ -4,13 +4,19 @@ This directory contains tools for comparing and profiling operators within the f
 
 ## Core Tools
 
-### 1. Operator Comparator ⭐ (主要工具)
+### 1. Universal Operator Comparator ⭐ (主要工具)
 - **File**: `operator_comparator_tool.py`
-- **Functionality**: 主要的性能对比工具，支持多种算子实现的性能测试和精度验证
+- **Functionality**: 主要的算子对比工具，支持两种模式：
+  - **性能模式** (默认): 纯性能测试，显示 `[PERF]` 状态
+  - **精度模式** (`--accuracy-only`): 专门的精度验证，显示基准参考和误差分析
 - **Usage**: 用于性能分析、精度验证和生成对比图表
-- **Example**:
+- **Examples**:
   ```bash
-  python run_comparator.py --operator matmul --test-cases small_square --plot
+  # 性能模式 (默认)
+  python tools/operator_comparator_tool.py --operator matmul --test-cases small_square --plot
+  
+  # 精度模式
+  python tools/operator_comparator_tool.py --operator matmul --test-cases small_square --accuracy-only
   ```
 
 ### 2. Nsight Compute Profiler
@@ -39,28 +45,33 @@ This directory contains tools for comparing and profiling operators within the f
   ```bash
   python tools/profiling_pytorch.py --sizes 1024 --output results
   ```
-  python tools/profile_nsight.py --operator matmul --test-case "matmul_1024x1024x1024"
-  ```
-
-### 4. PyTorch Profiler
-- **File**: `profiling_pytorch.py`
-- **Functionality**: Provides PyTorch-based profiling method for CUDA kernels when Nsight Compute is unavailable or encounters permission errors (`ERR_NVGPUCTRPERM`). It uses PyTorch CUDA events to measure kernel execution time.
-- **Usage**: A fallback for basic performance measurement without requiring special permissions.
-- **Example**:
-  ```bash
-  python tools/profiling_pytorch.py
-  ```
 
 ## Usage Scenarios
 
-### Performance Analysis
-Use the operator comparator tool to compare different implementations of the same operator:
+### Performance Analysis (性能模式)
+Use the operator comparator tool to compare different implementations focused on performance:
 ```bash
-# Compare all MatMul implementations and generate plots
-python tools/operator_comparator_tool.py --operator matmul --test-cases all --plot --output-dir results
+# 性能对比所有 MatMul 实现并生成图表
+python tools/operator_comparator_tool.py --operator matmul --test-cases small_square --plot
 
-# Compare specific test cases for ReLU
-python tools/operator_comparator_tool.py --operator relu --test-cases small_tensor,large_tensor
+# 对比特定的 ReLU 测试用例性能
+python tools/operator_comparator_tool.py --operator relu --test-cases small_tensor large_tensor
+
+# 多个测试用例的性能分析
+python tools/operator_comparator_tool.py --operator matmul --test-cases small_square medium_square large_square --plot
+```
+
+### Accuracy Analysis (精度模式)
+Use the accuracy-only mode for precision verification:
+```bash
+# 基础精度对比，显示基准参考
+python tools/operator_comparator_tool.py --operator matmul --test-cases small_square --accuracy-only
+
+# 特定实现的精度验证
+python tools/operator_comparator_tool.py --operator matmul --test-cases small_square --implementations pytorch_mm cuda_basic cuda_shared --accuracy-only
+
+# 多测试用例精度分析
+python tools/operator_comparator_tool.py --operator vector_add --test-cases small_vectors medium_vectors --accuracy-only
 ```
 
 ### Detailed Kernel Profiling

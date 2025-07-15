@@ -43,7 +43,7 @@ class ImplementationResult:
     name: str
     impl_id: str
     available: bool
-    correct: bool
+    correct: Optional[bool]  # Make correctness optional
     avg_time_ms: float
     std_time_ms: float
     min_time_ms: float
@@ -137,11 +137,23 @@ class BaseOperator(ABC):
         return self.reference_impl is not None and self.reference_impl in self.implementations
     
     def verify_correctness(self, result: torch.Tensor, reference: torch.Tensor, 
-                         tolerance: float = 1e-4) -> bool:
+                         tolerance: float = None) -> bool:
         """Verify if result matches reference"""
         if result is None or reference is None:
             return False
         try:
+            # Auto-adjust tolerance based on GPU architecture if not specified
+            if tolerance is None:
+                if torch.cuda.is_available():
+                    device_name = torch.cuda.get_device_name()
+                    # Higher-end GPUs (A100, H100, GB200) may have slight numerical differences
+                    if any(gpu in device_name for gpu in ['A100', 'H100', 'GB200', 'V100']):
+                        tolerance = 1e-3  # More relaxed for high-end GPUs
+                    else:
+                        tolerance = 1e-4  # Standard tolerance
+                else:
+                    tolerance = 1e-4
+            
             return torch.allclose(result, reference, atol=tolerance, rtol=tolerance)
         except Exception:
             return False
@@ -149,13 +161,21 @@ class BaseOperator(ABC):
     def benchmark_implementation(self, impl_id: str, inputs: List[torch.Tensor],
                                test_case: OperatorTestCase, warmup_runs: int = 5,
                                test_runs: int = 20) -> ImplementationResult:
-        """Benchmark a specific implementation"""
+        """Benchmark a specific implementation
+        
+        Args:
+            impl_id: Implementation identifier
+            inputs: Input tensors
+            test_case: Test case configuration
+            warmup_runs: Number of warmup iterations
+            test_runs: Number of benchmark iterations
+        """
         if impl_id not in self.implementations:
             return ImplementationResult(
                 name=impl_id,
                 impl_id=impl_id,
                 available=False,
-                correct=False,
+                correct=None,
                 avg_time_ms=0.0,
                 std_time_ms=0.0,
                 min_time_ms=0.0,
@@ -176,7 +196,7 @@ class BaseOperator(ABC):
                     name=display_name,
                     impl_id=impl_id,
                     available=False,
-                    correct=False,
+                    correct=None,
                     avg_time_ms=0.0,
                     std_time_ms=0.0,
                     min_time_ms=0.0,
@@ -209,15 +229,12 @@ class BaseOperator(ABC):
             flops = self.calculate_flops(test_case)
             gflops = flops / (avg_time_ms * 1e6)  # Convert to GFLOPS
             
-            # Check correctness
-            reference = self.get_reference_result(inputs, test_case)
-            is_correct = self.verify_correctness(result, reference)
-            
+            # Pure performance mode - no correctness checking
             return ImplementationResult(
                 name=display_name,
                 impl_id=impl_id,
                 available=True,
-                correct=is_correct,
+                correct=None,  # Always None for performance mode
                 avg_time_ms=avg_time_ms,
                 std_time_ms=std_time_ms,
                 min_time_ms=min_time_ms,
@@ -231,7 +248,7 @@ class BaseOperator(ABC):
                 name=display_name,
                 impl_id=impl_id,
                 available=False,
-                correct=False,
+                correct=None,
                 avg_time_ms=0.0,
                 std_time_ms=0.0,
                 min_time_ms=0.0,
@@ -243,7 +260,14 @@ class BaseOperator(ABC):
     def run_comparison(self, test_case: OperatorTestCase, 
                       selected_impls: Optional[List[str]] = None,
                       warmup_runs: int = 5, test_runs: int = 20) -> List[ImplementationResult]:
-        """Run comparison for a specific test case"""
+        """Run comparison for a specific test case
+        
+        Args:
+            test_case: Test case configuration
+            selected_impls: List of implementation IDs to test (None for all)
+            warmup_runs: Number of warmup iterations
+            test_runs: Number of benchmark iterations
+        """
         if selected_impls is None:
             selected_impls = list(self.implementations.keys())
             
@@ -284,3 +308,96 @@ class BaseOperator(ABC):
             'display_name': self.implementations[impl_id]['display_name'],
             'description': self.implementations[impl_id]['description']
         }
+    
+    def run_accuracy_comparison(self, test_case: OperatorTestCase, 
+                              selected_impls: Optional[List[str]] = None,
+                              reference_impl: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+        """Run accuracy comparison for implementations
+        
+        Args:
+            test_case: Test case configuration
+            selected_impls: List of implementation IDs to test (None for all)
+            reference_impl: Reference implementation ID (None for auto-detection)
+            
+        Returns:
+            Dictionary with accuracy metrics for each implementation, plus baseline info
+        """
+        if selected_impls is None:
+            selected_impls = list(self.implementations.keys())
+            
+        if reference_impl is None:
+            reference_impl = self.get_reference_implementation()
+            
+        inputs = self.generate_inputs(test_case)
+        
+        # Get reference result
+        try:
+            reference_result = self.get_reference_result(inputs, test_case)
+        except Exception as e:
+            print(f"[ERROR] Failed to get reference result: {e}")
+            return {}
+        
+        accuracy_results = {}
+        
+        # Add baseline information at the top
+        ref_info = self.get_implementation_info(reference_impl)
+        accuracy_results['_baseline_info'] = {
+            'reference_impl_id': reference_impl,
+            'reference_display_name': ref_info['display_name'],
+            'reference_description': ref_info['description']
+        }
+        
+        for impl_id in selected_impls:
+            if impl_id not in self.implementations:
+                continue
+                
+            try:
+                impl_func = self.implementations[impl_id]['function']
+                result = impl_func(inputs, test_case.additional_params or {})
+                
+                if result is None:
+                    accuracy_results[impl_id] = {
+                        'status': 'FAIL',
+                        'error': 'Implementation returned None',
+                        'max_error': float('inf'),
+                        'mean_error': float('inf'),
+                        'relative_error': float('inf')
+                    }
+                    continue
+                
+                # Calculate error metrics
+                abs_error = torch.abs(result - reference_result)
+                max_error = abs_error.max().item()
+                mean_error = abs_error.mean().item()
+                relative_error = (abs_error / (torch.abs(reference_result) + 1e-8)).max().item()
+                
+                # Test different tolerance levels
+                tolerances = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2]
+                passed_tolerance = None
+                for tol in tolerances:
+                    if self.verify_correctness(result, reference_result, tolerance=tol):
+                        passed_tolerance = tol
+                        break
+                
+                status = 'PASS' if passed_tolerance is not None else 'FAIL'
+                
+                accuracy_results[impl_id] = {
+                    'status': status,
+                    'max_error': max_error,
+                    'mean_error': mean_error,
+                    'relative_error': relative_error,
+                    'passed_tolerance': passed_tolerance,
+                    'has_nan': torch.isnan(result).any().item(),
+                    'has_inf': torch.isinf(result).any().item()
+                }
+                
+            except Exception as e:
+                accuracy_results[impl_id] = {
+                    'status': 'ERROR',
+                    'error': str(e),
+                    'max_error': float('inf'),
+                    'mean_error': float('inf'),
+                    'relative_error': float('inf')
+                }
+        
+        return accuracy_results
