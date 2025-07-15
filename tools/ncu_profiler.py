@@ -317,14 +317,19 @@ for _ in range({iterations}):
                 else:
                     print(f"Generated script not found: {script_path}")
                 
-                if 'ERR_NVGPUCTRPERM' in result.stderr:
+                # Check for permission error in both stderr and stdout
+                error_output = result.stderr + result.stdout
+                if 'ERR_NVGPUCTRPERM' in error_output:
                     print("\n" + "="*60)
                     print("PERMISSION ERROR DETECTED!")
-                    print("This error occurs when NCU doesn't have sufficient permissions.")
+                    print("The user does not have permission to access NVIDIA GPU Performance Counters.")
                     print("\nSolutions:")
-                    print("1. Use sudo: sudo python ncu_profiler.py ...")
-                    print("2. Set system option: echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf")
-                    print("3. Use PyTorch profiler: python profiling_pytorch.py ...")
+                    print("1. Use sudo: python tools/ncu_profiler.py --sudo --operator matmul --test-case \"matmul_1024x1024x1024\"")
+                    print("2. Set system option permanently:")
+                    print("   echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf")
+                    print("   sudo modprobe -r nvidia && sudo modprobe nvidia")
+                    print("3. Use PyTorch profiler instead: python tools/profiling_pytorch.py")
+                    print("4. More info: https://developer.nvidia.com/ERR_NVGPUCTRPERM")
                     print("="*60)
                 return None
                 
@@ -590,10 +595,40 @@ def main():
     
     if not profile_files:
         print("[FAIL] No successful profiles generated!")
-        print("\\nTroubleshooting:")
-        print("1. Check CUDA installation: nvcc --version")
-        print("2. Try with sudo: python ncu_profiler.py --sudo ...")
-        print("3. Use PyTorch profiler: python profiling_pytorch.py")
+        print("\nDiagnosing issue...")
+        
+        # Check if this was a permission error by looking for recent output
+        permission_error_detected = False
+        try:
+            # This is a simple heuristic - in a real scenario you might want to 
+            # store the error type during profiling
+            import os
+            if os.path.exists(profiler.output_dir):
+                # Check if any profile scripts were generated (indicating setup worked)
+                script_files = list(profiler.output_dir.glob("profile_*.py"))
+                if script_files:
+                    permission_error_detected = True
+        except:
+            pass
+        
+        if permission_error_detected:
+            print("\n" + "="*60)
+            print("PERMISSION ERROR DETECTED!")
+            print("NCU requires elevated permissions to access GPU performance counters.")
+            print("\nRECOMMENDED SOLUTIONS:")
+            print("1. Use sudo with NCU:")
+            print(f"   sudo python tools/ncu_profiler.py --sudo --operator {args.operator} --test-case \"{args.test_case}\"")
+            print("\n2. Configure system permanently (requires reboot):")
+            print("   echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf")
+            print("   sudo rmmod nvidia && sudo modprobe nvidia")
+            print("\n3. Use PyTorch Profiler as alternative (no sudo required):")
+            print("   python tools/profiling_pytorch.py")
+            print("="*60)
+        else:
+            print("\nTroubleshooting:")
+            print("1. Check CUDA installation: nvcc --version")
+            print("2. Try with sudo: python tools/ncu_profiler.py --sudo ...")
+            print("3. Use PyTorch profiler: python tools/profiling_pytorch.py")
         return 1
     
     # Generate analysis tools
