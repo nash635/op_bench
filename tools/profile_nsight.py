@@ -376,7 +376,7 @@ nsys stats --report gputrace,gpukernsum,gpumemtimesum {profile_basename}
 echo
 '''
         
-        script_content += '''
+        script_content += r'''
 echo "=== 生成可视化报告 ==="
 echo "可以使用 Nsight Systems GUI 打开 .nsys-rep 文件进行详细分析"
 echo "或使用以下命令生成 SQLite 数据库:"
@@ -384,7 +384,7 @@ echo
 
 for file in *.nsys-rep; do
     if [ -f "$file" ]; then
-        echo "nsys export --type sqlite --output \${file%.nsys-rep}.sqlite $file"
+        echo "nsys export --type sqlite --output ${file%.nsys-rep}.sqlite $file"
     fi
 done
 '''
@@ -431,7 +431,7 @@ ncu --import {profile_basename} --csv > "${{profile_basename%.ncu-rep}}_summary.
 echo
 '''
         
-        script_content += '''
+        script_content += r'''
 echo "=== 生成对比报告 ==="
 echo "可以使用 Nsight Compute GUI 打开 .ncu-rep 文件进行详细分析"
 echo "或使用以下命令导出详细数据:"
@@ -439,7 +439,7 @@ echo
 
 for file in *.ncu-rep; do
     if [ -f "$file" ]; then
-        echo "ncu --import $file --csv > \${{file%.ncu-rep}}_detailed.csv"
+        echo "ncu --import $file --csv > ${file%.ncu-rep}_detailed.csv"
     fi
 done
 '''
@@ -696,6 +696,14 @@ def main():
     parser.add_argument('--mode', choices=['nsys', 'ncu', 'both'], default='nsys',
                        help='Profiling 模式: nsys (Nsight Systems), ncu (Nsight Compute), both (默认: nsys)')
     
+    # 添加与 README 文档一致的参数
+    parser.add_argument('--operator', default='matmul',
+                       help='要分析的算子类型 (默认: matmul)')
+    parser.add_argument('--test-case', default='large_square',
+                       help='测试用例名称 (默认: large_square)')
+    parser.add_argument('--duration', type=int, default=10,
+                       help='Profiling 持续时间（秒） (默认: 10)')
+    
     args = parser.parse_args()
     
     # 解析矩阵大小
@@ -713,8 +721,11 @@ def main():
     
     print("CUDA MatMul Nsight Profiler")
     print("=" * 50)
+    print(f"算子类型: {args.operator}")
+    print(f"测试用例: {args.test_case}")
     print(f"输出目录: {args.output}")
     print(f"迭代次数: {args.iterations}")
+    print(f"持续时间: {args.duration}s")
     print(f"矩阵大小: {matrix_sizes}")
     print(f"Profile kernels: {args.kernels}")
     print(f"Profiling 模式: {args.mode}")

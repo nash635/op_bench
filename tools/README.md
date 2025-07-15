@@ -4,7 +4,7 @@ This directory contains tools for comparing and profiling operators within the f
 
 ## Core Tools
 
-### 1. Universal Operator Comparator ⭐ (主要工具)
+### 1. Universal Operator Comparator (主要工具)
 - **File**: `operator_comparator_tool.py`
 - **Functionality**: 主要的算子对比工具，支持两种模式：
   - **性能模式** (默认): 纯性能测试，显示 `[PERF]` 状态

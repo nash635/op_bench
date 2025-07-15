@@ -312,7 +312,7 @@ def run_deployment_validation():
     if all_issues:
         print_error("Deployment validation failed with the following issues:")
         for issue in all_issues:
-            print(f"  ✗ {issue}")
+            print(f"  FAIL {issue}")
         return False
     else:
         print_success("Deployment validation completed successfully!")
@@ -320,7 +320,7 @@ def run_deployment_validation():
         if all_warnings:
             print_warning("Note: The following warnings were encountered:")
             for warning in all_warnings:
-                print(f"  ⚠ {warning}")
+                print(f"  WARNING {warning}")
         
         print("\nNext steps:")
         print("1. Run network tests: python run_network_tests.py --all")
@@ -544,61 +544,61 @@ def test_operators():
             module = __import__(module_name, fromlist=[class_name])
             operator_class = getattr(module, class_name)
             operator = operator_class()
-            print(f"✓ {name} operator created successfully")
+            print(f"PASS {name} operator created successfully")
             
             # Get test cases
             test_cases = operator.get_test_cases()
-            print(f"✓ Found {len(test_cases)} test cases")
+            print(f"PASS Found {len(test_cases)} test cases")
             
             # Get implementations
             implementations = operator.get_available_implementations()
-            print(f"✓ Available implementations: {implementations}")
+            print(f"PASS Available implementations: {implementations}")
             
             # Test first case if available
             if test_cases:
                 test_case = test_cases[0]
-                print(f"✓ Testing case: {test_case.name}")
+                print(f"PASS Testing case: {test_case.name}")
                 
                 # Generate inputs
                 inputs = operator.generate_inputs(test_case)
-                print(f"✓ Generated inputs: {inputs[0].shape}")
+                print(f"PASS Generated inputs: {inputs[0].shape}")
                 
                 # Calculate FLOPS
                 flops = operator.calculate_flops(test_case)
-                print(f"✓ FLOPS calculation: {flops}")
+                print(f"PASS FLOPS calculation: {flops}")
                 
                 # For specific operators, run additional tests
                 if name == 'RDMA Bandwidth':
                     devices = operator.rdma_devices
-                    print(f"✓ Found {len(devices)} RDMA devices")
+                    print(f"PASS Found {len(devices)} RDMA devices")
                     if devices:
-                        print(f"✓ First device: {devices[0]}")
+                        print(f"PASS First device: {devices[0]}")
                         device_info = operator.get_rdma_device_info()
-                        print(f"✓ Device info: {len(device_info)} devices")
+                        print(f"PASS Device info: {len(device_info)} devices")
                     else:
                         print("! No RDMA devices found - this is expected on non-RDMA systems")
                 
                 elif name == 'PCIe Bandwidth':
                     gpu_devices = operator.gpu_devices
-                    print(f"✓ Found {len(gpu_devices)} GPU devices")
+                    print(f"PASS Found {len(gpu_devices)} GPU devices")
                     if gpu_devices:
-                        print(f"✓ First GPU: {gpu_devices[0]['name']}")
+                        print(f"PASS First GPU: {gpu_devices[0]['name']}")
                         topology = operator.get_pcie_topology()
-                        print(f"✓ PCIe topology: {len(topology.get('pcie_devices', []))} devices")
+                        print(f"PASS PCIe topology: {len(topology.get('pcie_devices', []))} devices")
                     else:
                         print("! No GPU devices found - this is expected on non-GPU systems")
                 
                 elif name == 'Network Stress':
                     system_info = operator.get_system_info()
-                    print(f"✓ System info:")
+                    print(f"PASS System info:")
                     print(f"  - TCP available: {system_info['tcp_info']['available']}")
                     print(f"  - RDMA available: {system_info['rdma_info']['available']}")
                     print(f"  - PCIe available: {system_info['pcie_info']['available']}")
             
-            print(f"✓ {name} operator test completed")
+            print(f"PASS {name} operator test completed")
             
         except Exception as e:
-            print(f"✗ {name} operator test failed: {e}")
+            print(f"FAIL {name} operator test failed: {e}")
             all_passed = False
     
     print("\n" + "="*60)
@@ -656,8 +656,8 @@ def run_tcp_tests(quick_mode=False, test_duration=3):
                 
                 print(f"\nResults:")
                 for result in results:
-                    status = "✓" if result.available else "✗"
-                    correctness = "✓" if result.correct else "✗"
+                    status = "PASS" if result.available else "FAIL"
+                    correctness = "PASS" if result.correct else "FAIL"
                     # For TCP bandwidth tests, show only bandwidth (not GFLOPS)
                     if hasattr(result, 'result') and result.result is not None:
                         actual_bandwidth = float(result.result[0])
@@ -669,14 +669,14 @@ def run_tcp_tests(quick_mode=False, test_duration=3):
                               f"time: {result.avg_time_ms:.0f}ms")
                     
             except TimeoutError as e:
-                print(f"  ✗ Test timed out: {e}")
+                print(f"  FAIL Test timed out: {e}")
             except Exception as e:
-                print(f"  ✗ Test failed: {e}")
+                print(f"  FAIL Test failed: {e}")
     
     except ImportError as e:
-        print(f"  ✗ Cannot import TCP operator: {e}")
+        print(f"  FAIL Cannot import TCP operator: {e}")
     except Exception as e:
-        print(f"  ✗ TCP tests failed: {e}")
+        print(f"  FAIL TCP tests failed: {e}")
 
 def run_rdma_tests(quick_mode=False, test_duration=3):
     """Run RDMA bandwidth tests"""
@@ -711,8 +711,8 @@ def run_rdma_tests(quick_mode=False, test_duration=3):
                 
                 print(f"\nResults:")
                 for result in results:
-                    status = "✓" if result.available else "✗"
-                    correctness = "✓" if result.correct else "✗"
+                    status = "PASS" if result.available else "FAIL"
+                    correctness = "PASS" if result.correct else "FAIL"
                     if hasattr(result, 'result') and result.result is not None:
                         actual_bandwidth = float(result.result[0])
                         print(f"  {status} {result.name}: {actual_bandwidth:.2f} Gbps, "
@@ -721,12 +721,12 @@ def run_rdma_tests(quick_mode=False, test_duration=3):
                         print(f"  {status} {result.name}: Test skipped or failed")
                         
             except Exception as e:
-                print(f"  ✗ Test failed: {e}")
+                print(f"  FAIL Test failed: {e}")
     
     except ImportError as e:
-        print(f"  ✗ Cannot import RDMA operator: {e}")
+        print(f"  FAIL Cannot import RDMA operator: {e}")
     except Exception as e:
-        print(f"  ✗ RDMA tests failed: {e}")
+        print(f"  FAIL RDMA tests failed: {e}")
 
 def run_pcie_tests(quick_mode=False, test_duration=3):
     """Run PCIe bandwidth tests"""
@@ -758,8 +758,8 @@ def run_pcie_tests(quick_mode=False, test_duration=3):
                 
                 print(f"\nResults:")
                 for result in results:
-                    status = "✓" if result.available else "✗"
-                    correctness = "✓" if result.correct else "✗"
+                    status = "PASS" if result.available else "FAIL"
+                    correctness = "PASS" if result.correct else "FAIL"
                     if hasattr(result, 'result') and result.result is not None:
                         actual_bandwidth = float(result.result[0])
                         print(f"  {status} {result.name}: {actual_bandwidth:.2f} Gbps, "
@@ -768,12 +768,12 @@ def run_pcie_tests(quick_mode=False, test_duration=3):
                         print(f"  {status} {result.name}: Test skipped or failed")
                         
             except Exception as e:
-                print(f"  ✗ Test failed: {e}")
+                print(f"  FAIL Test failed: {e}")
     
     except ImportError as e:
-        print(f"  ✗ Cannot import PCIe operator: {e}")
+        print(f"  FAIL Cannot import PCIe operator: {e}")
     except Exception as e:
-        print(f"  ✗ PCIe tests failed: {e}")
+        print(f"  FAIL PCIe tests failed: {e}")
 
 def run_network_stress_tests(quick_mode=False, test_duration=3):
     """Run network stress tests"""
@@ -807,8 +807,8 @@ def run_network_stress_tests(quick_mode=False, test_duration=3):
                 
                 print(f"\nResults:")
                 for result in results:
-                    status = "✓" if result.available else "✗"
-                    correctness = "✓" if result.correct else "✗"
+                    status = "PASS" if result.available else "FAIL"
+                    correctness = "PASS" if result.correct else "FAIL"
                     if hasattr(result, 'result') and result.result is not None:
                         actual_bandwidth = float(result.result[0])
                         print(f"  {status} {result.name}: {actual_bandwidth:.2f} Gbps, "
@@ -817,12 +817,12 @@ def run_network_stress_tests(quick_mode=False, test_duration=3):
                         print(f"  {status} {result.name}: Test skipped or failed")
                         
             except Exception as e:
-                print(f"  ✗ Test failed: {e}")
+                print(f"  FAIL Test failed: {e}")
     
     except ImportError as e:
-        print(f"  ✗ Cannot import Network Stress operator: {e}")
+        print(f"  FAIL Cannot import Network Stress operator: {e}")
     except Exception as e:
-        print(f"  ✗ Network stress tests failed: {e}")
+        print(f"  FAIL Network stress tests failed: {e}")
     
     test_cases = rdma_op.get_test_cases()
     
@@ -835,8 +835,8 @@ def run_network_stress_tests(quick_mode=False, test_duration=3):
             
             print(f"Results:")
             for result in results:
-                status = "✓" if result.available else "✗"
-                correctness = "✓" if result.correct else "✗"
+                status = "PASS" if result.available else "FAIL"
+                correctness = "PASS" if result.correct else "FAIL"
                 # For RDMA bandwidth tests, show only bandwidth
                 if hasattr(result, 'result') and result.result is not None:
                     actual_bandwidth = float(result.result[0])
@@ -847,7 +847,7 @@ def run_network_stress_tests(quick_mode=False, test_duration=3):
                           f"time: {result.avg_time_ms:.0f}ms")
                 
         except Exception as e:
-            print(f"  ✗ Test failed: {e}")
+            print(f"  FAIL Test failed: {e}")
 
 def run_network_stress_tests():
     """Run comprehensive network stress tests"""
@@ -884,8 +884,8 @@ def run_network_stress_tests():
             
             print(f"Results:")
             for result in results:
-                status = "✓" if result.available else "✗"
-                correctness = "✓" if result.correct else "✗"
+                status = "PASS" if result.available else "FAIL"
+                correctness = "PASS" if result.correct else "FAIL"
                 # For network stress tests, show only bandwidth
                 if hasattr(result, 'result') and result.result is not None:
                     actual_bandwidth = float(result.result[0])
@@ -896,7 +896,7 @@ def run_network_stress_tests():
                           f"time: {result.avg_time_ms:.0f}ms")
                 
         except Exception as e:
-            print(f"  ✗ Test failed: {e}")
+            print(f"  FAIL Test failed: {e}")
 
 def check_dependencies():
     """Check system dependencies and tools"""
@@ -932,7 +932,7 @@ def check_dependencies():
             else:
                 available = False
         
-        status = "✓" if available else "✗"
+        status = "PASS" if available else "FAIL"
         print(f"  {status} {description}: {'Available' if available else 'Not found'}")
         results[cmd] = available
     
@@ -959,7 +959,7 @@ def check_python_packages():
         except ImportError:
             available = False
         
-        status = "✓" if available else "✗"
+        status = "PASS" if available else "FAIL"
         print(f"  {status} {description}: {'Available' if available else 'Not installed'}")
         results[package] = available
     
@@ -984,13 +984,13 @@ def check_hardware():
                     if len(parts) >= 1:
                         rdma_devices.append(parts[0])
             hardware['rdma_devices'] = rdma_devices
-            print(f"  ✓ RDMA devices: {len(rdma_devices)} found ({', '.join(rdma_devices)})")
+            print(f"  PASS RDMA devices: {len(rdma_devices)} found ({', '.join(rdma_devices)})")
         else:
             hardware['rdma_devices'] = []
-            print(f"  ✗ RDMA devices: None found")
+            print(f"  FAIL RDMA devices: None found")
     except:
         hardware['rdma_devices'] = []
-        print(f"  ✗ RDMA devices: Cannot check (tools not available)")
+        print(f"  FAIL RDMA devices: Cannot check (tools not available)")
     
     # Check GPU devices
     try:
@@ -1003,15 +1003,15 @@ def check_hardware():
                     if match:
                         gpu_devices.append(match.group(1))
             hardware['gpu_devices'] = gpu_devices
-            print(f"  ✓ GPU devices: {len(gpu_devices)} found")
+            print(f"  PASS GPU devices: {len(gpu_devices)} found")
             for i, gpu in enumerate(gpu_devices):
                 print(f"    - GPU {i}: {gpu}")
         else:
             hardware['gpu_devices'] = []
-            print(f"  ✗ GPU devices: None found")
+            print(f"  FAIL GPU devices: None found")
     except:
         hardware['gpu_devices'] = []
-        print(f"  ✗ GPU devices: Cannot check (nvidia-smi not available)")
+        print(f"  FAIL GPU devices: Cannot check (nvidia-smi not available)")
     
     # Check network interfaces
     try:
@@ -1019,10 +1019,10 @@ def check_hardware():
         hostname = socket.gethostname()
         local_ip = socket.gethostbyname(hostname)
         hardware['network_interfaces'] = [local_ip]
-        print(f"  ✓ Network interfaces: Available (local IP: {local_ip})")
+        print(f"  PASS Network interfaces: Available (local IP: {local_ip})")
     except:
         hardware['network_interfaces'] = []
-        print(f"  ✗ Network interfaces: Cannot determine")
+        print(f"  FAIL Network interfaces: Cannot determine")
     
     return hardware
 
@@ -1053,7 +1053,7 @@ def validate_operators():
             test_cases = operator.get_test_cases()
             implementations = operator.get_available_implementations()
             
-            print(f"  ✓ {name} Operator:")
+            print(f"  PASS {name} Operator:")
             print(f"    - Import: Success")
             print(f"    - Instantiation: Success")
             print(f"    - Test cases: {len(test_cases)}")
@@ -1070,7 +1070,7 @@ def validate_operators():
             results[name] = True
             
         except Exception as e:
-            print(f"  ✗ {name} Operator: Failed ({e})")
+            print(f"  FAIL {name} Operator: Failed ({e})")
             results[name] = False
     
     success_count = sum(results.values())

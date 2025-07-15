@@ -22,7 +22,7 @@ python run_comparator.py --list-operators
 
 The framework provides two modes:
 
-#### 🚀 Performance Mode (Default)
+#### Performance Mode (Default)
 Pure performance benchmarking:
 
 ```bash
@@ -41,7 +41,7 @@ python run_comparator.py --operator matmul --test-cases small_square --plot
   [PERF] Basic CUDA Kernel: 0.103ms, 324.5 GFLOPS
 ```
 
-#### 🎯 Accuracy Mode
+#### Accuracy Mode
 Precision verification with baseline reference:
 
 ```bash
@@ -52,10 +52,10 @@ python run_comparator.py --operator matmul --test-cases small_square --accuracy-
 **Sample Output:**
 ```
 Accuracy Results for small_square:
-📊 Baseline (Reference): PyTorch torch.mm (pytorch_mm)
-✓ pytorch_mm: PASS (tolerance: 1e-06)
-✓ cuda_basic: PASS (tolerance: 0.0001)
-✓ cuda_shared: PASS (tolerance: 0.0001)
+Baseline (Reference): PyTorch torch.mm (pytorch_mm)
+pytorch_mm: PASS (tolerance: 1e-06)
+cuda_basic: PASS (tolerance: 0.0001)
+cuda_shared: PASS (tolerance: 0.0001)
 ```
 
 ## Supported Operators

@@ -207,7 +207,7 @@ class UniversalOperatorComparator:
             
             for result in case_results:
                 if result.available:
-                    available_str = "✓"
+                    available_str = "PASS"
                     
                     if is_network_test:
                         metric_value = f"{result.bandwidth_gbps:.3f}"
@@ -217,7 +217,7 @@ class UniversalOperatorComparator:
                     # Performance-only row without correctness column
                     report += f"| {result.name} | {available_str} | {result.avg_time_ms:.3f} | {metric_value} | {result.min_time_ms:.3f} | {result.std_time_ms:.3f} |\n"
                 else:
-                    report += f"| {result.name} | ✗ | N/A | N/A | N/A | N/A |\n"
+                    report += f"| {result.name} | FAIL | N/A | N/A | N/A | N/A |\n"
                     
             report += "\n"
             
@@ -707,15 +707,15 @@ def main():
             # Extract and display baseline info if available
             baseline_info = accuracy_results.pop('_baseline_info', None)
             if baseline_info:
-                print(f"📊 Baseline (Reference): {baseline_info['reference_display_name']} ({baseline_info['reference_impl_id']})")
+                print(f"Baseline (Reference): {baseline_info['reference_display_name']} ({baseline_info['reference_impl_id']})")
                 print("-" * 60)
             
             for impl_id, metrics in accuracy_results.items():
                 status = metrics.get('status', 'UNKNOWN')
                 if status == 'PASS':
-                    print(f"✓ {impl_id}: PASS (tolerance: {metrics.get('passed_tolerance', 'N/A')})")
+                    print(f"{impl_id}: PASS (tolerance: {metrics.get('passed_tolerance', 'N/A')})")
                 elif status == 'FAIL':
-                    print(f"✗ {impl_id}: FAIL (max_error: {metrics.get('max_error', 'N/A'):.2e})")
+                    print(f"{impl_id}: FAIL (max_error: {metrics.get('max_error', 'N/A'):.2e})")
                 else:
                     print(f"? {impl_id}: {status} ({metrics.get('error', 'Unknown error')})")
         

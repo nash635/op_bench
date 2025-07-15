@@ -463,10 +463,43 @@ def main():
     parser.add_argument('--sudo', action='store_true',
                        help='Use sudo for NCU (needed for some systems)')
     
+    # 添加与 README 文档一致的参数
+    parser.add_argument('--operator', default='matmul',
+                       help='要分析的算子类型 (默认: matmul)')
+    parser.add_argument('--test-case', default=None,
+                       help='测试用例名称 (用于兼容性，实际使用 --sizes)')
+    
     args = parser.parse_args()
+    
+    # Handle test-case argument if provided (extract size from test case name)
+    if args.test_case:
+        import re
+        # Extract dimensions from test case like "matmul_1024x1024x1024"
+        match = re.search(r'(\d+)x(\d+)x(\d+)', args.test_case)
+        if match:
+            m, n, k = map(int, match.groups())
+            # Override sizes with the parsed dimensions
+            args.sizes = [m]  # Use the first dimension as the size
+            print(f"从测试用例 '{args.test_case}' 解析出矩阵大小: {m}x{n}x{k}")
+        else:
+            print(f"[WARN] 无法从测试用例 '{args.test_case}' 解析矩阵大小，使用默认值")
     
     # Create matrix sizes (assuming square matrices for simplicity)
     matrix_sizes = [(size, size, size) for size in args.sizes]
+    
+    # Print configuration summary
+    print("NCU Profiler 配置:")
+    print("=" * 40)
+    print(f"算子类型: {args.operator}")
+    if args.test_case:
+        print(f"测试用例: {args.test_case}")
+    print(f"矩阵大小: {args.sizes}")
+    print(f"Kernels: {args.kernels}")
+    print(f"Metrics: {args.metrics}")
+    print(f"迭代次数: {args.iterations}")
+    if args.output:
+        print(f"输出目录: {args.output}")
+    print()
     
     # Initialize profiler
     profiler = NCUProfiler(args.output)
