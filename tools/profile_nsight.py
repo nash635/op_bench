@@ -12,13 +12,34 @@ import subprocess
 from pathlib import Path
 from typing import List, Dict, Tuple
 
+# 设置PyTorch库路径以解决CUDA扩展导入问题
+def setup_library_path():
+    """设置正确的库路径以确保CUDA扩展能够正常加载"""
+    torch_lib_path = os.path.join(torch.__path__[0], 'lib')
+    current_ld_path = os.environ.get('LD_LIBRARY_PATH', '')
+    
+    if torch_lib_path not in current_ld_path:
+        if current_ld_path:
+            os.environ['LD_LIBRARY_PATH'] = f"{torch_lib_path}:{current_ld_path}"
+        else:
+            os.environ['LD_LIBRARY_PATH'] = torch_lib_path
+        print(f"[INFO] 设置库路径: {torch_lib_path}")
+
+# 在导入其他模块前设置库路径
+setup_library_path()
+
 class NsightProfiler:
     def __init__(self, output_dir: str = "nsight_profiles"):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.matmul_cuda = None
         
-        # 加载扩展
+        # 延迟加载CUDA扩展
+        self._load_cuda_extension()
+    
+    def _load_cuda_extension(self):
+        """加载CUDA扩展"""
         try:
             import matmul_cuda_ext
             self.matmul_cuda = matmul_cuda_ext
