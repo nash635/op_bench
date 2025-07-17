@@ -46,6 +46,119 @@ except Exception as e:
 
 from framework.operator_framework import BaseOperator, OperatorType, OperatorTestCase, ImplementationResult
 
+class GPUProfiler:
+    """Profile GPU capabilities and recommend optimal test configurations"""
+    
+    def __init__(self):
+        self.device_name = torch.cuda.get_device_name() if torch.cuda.is_available() else "CPU"
+        self.total_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3) if torch.cuda.is_available() else 0
+        self.compute_capability = torch.cuda.get_device_properties(0).major if torch.cuda.is_available() else 0
+        
+    def get_gpu_class(self) -> str:
+        """Determine GPU performance class"""
+        device_name = self.device_name.upper()
+        
+        if 'B200' in device_name:
+            return 'B200'
+        elif 'H100' in device_name:
+            return 'H100'
+        elif 'A100' in device_name:
+            return 'A100'
+        elif 'V100' in device_name:
+            return 'V100'
+        elif 'RTX' in device_name and any(x in device_name for x in ['4090', '4080', '3090']):
+            return 'HIGH_END_CONSUMER'
+        elif 'GTX' in device_name or 'RTX' in device_name:
+            return 'CONSUMER'
+        else:
+            return 'UNKNOWN'
+    
+    def get_theoretical_peak_flops(self) -> float:
+        """Get theoretical peak FLOPS based on GPU"""
+        gpu_class = self.get_gpu_class()
+        
+        peak_flops = {
+            'B200': 2500e12,    # 2.5 PFLOPS FP8
+            'H100': 1000e12,    # 1.0 PFLOPS FP8
+            'A100': 312e12,     # 312 TFLOPS FP8
+            'V100': 125e12,     # 125 TFLOPS FP16
+            'HIGH_END_CONSUMER': 100e12,  # ~100 TFLOPS
+            'CONSUMER': 50e12,  # ~50 TFLOPS
+        }
+        
+        return peak_flops.get(gpu_class, 50e12)
+    
+    def get_adaptive_config(self) -> Dict[str, Any]:
+        """Get adaptive configuration based on GPU capabilities"""
+        gpu_class = self.get_gpu_class()
+        memory_factor = min(self.total_memory_gb / 80.0, 1.0)  # Normalize to 80GB baseline
+        
+        config = {
+            'device_name': self.device_name,
+            'gpu_class': gpu_class,
+            'memory_gb': self.total_memory_gb,
+            'compute_capability': self.compute_capability,
+            'theoretical_peak_flops': self.get_theoretical_peak_flops(),
+            'memory_factor': memory_factor
+        }
+        
+        # Recommend test cases based on GPU class
+        if gpu_class in ['B200', 'H100']:
+            test_cases = [
+                'h100_target_small' if gpu_class == 'H100' else 'b200_target_medium',
+                'h100_target_medium' if gpu_class == 'H100' else 'b200_target_large',
+                'h100_target_large' if gpu_class == 'H100' else 'b200_peak_stress',
+                # Add stress tests for high-memory configs
+                f'{gpu_class.lower()}_peak_stress' if memory_factor >= 0.8 else None,
+            ]
+        elif gpu_class == 'A100':
+            test_cases = ['medium_baseline', 'h100_target_small', 'h100_target_medium']
+        else:
+            test_cases = ['quick_validation', 'medium_baseline']
+        
+        config['recommended_test_cases'] = [tc for tc in test_cases if tc is not None]
+        config['recommended_backends'] = ['pytorch_bf16', 'simulated_fp8_fast', 'simulated_fp8_memory_opt']
+        
+        return config
+
+class FP8BenchmarkConfigs:
+    """Predefined benchmark configurations for different scenarios"""
+    
+    @staticmethod
+    def get_h100_configs() -> Dict[str, Any]:
+        """Benchmark configurations optimized for H100 GPU"""
+        return {
+            "h100_quick_validation": {
+                "test_cases": ["quick_validation", "medium_baseline"],
+                "backends": ["pytorch_bf16", "simulated_fp8_fast"],
+                "runs": 3, "warmup": 2, "target_efficiency": 60
+            },
+            "h100_performance_suite": {
+                "test_cases": ["h100_target_small", "h100_target_medium", "h100_target_large"],
+                "backends": None, "runs": 5, "warmup": 3, "target_efficiency": 70
+            },
+            "h100_peak_stress": {
+                "test_cases": ["h100_peak_stress"],
+                "backends": ["simulated_fp8_fast", "simulated_fp8_memory_opt"],
+                "runs": 3, "warmup": 2, "target_efficiency": 80
+            }
+        }
+    
+    @staticmethod
+    def get_b200_configs() -> Dict[str, Any]:
+        """Benchmark configurations optimized for B200 GPU"""
+        return {
+            "b200_performance_suite": {
+                "test_cases": ["b200_target_medium", "b200_target_large"],
+                "backends": None, "runs": 5, "warmup": 3, "target_efficiency": 70
+            },
+            "b200_peak_stress": {
+                "test_cases": ["b200_peak_stress"],
+                "backends": ["simulated_fp8_fast"],
+                "runs": 3, "warmup": 2, "target_efficiency": 85
+            }
+        }
+
 class UniversalOperatorComparator:
     """Universal comparator for all operator types"""
     
@@ -73,7 +186,8 @@ class UniversalOperatorComparator:
             'tcp_bandwidth': OperatorType.TCP_BANDWIDTH,
             'rdma_bandwidth': OperatorType.RDMA_BANDWIDTH,
             'pcie_bandwidth': OperatorType.PCIE_BANDWIDTH,
-            'network_stress': OperatorType.NETWORK_STRESS
+            'network_stress': OperatorType.NETWORK_STRESS,
+            'fp8_linear': OperatorType.FP8_LINEAR
         }
         
         if operator_type not in type_mapping:
@@ -96,7 +210,8 @@ class UniversalOperatorComparator:
             'tcp_bandwidth': OperatorType.TCP_BANDWIDTH,
             'rdma_bandwidth': OperatorType.RDMA_BANDWIDTH,
             'pcie_bandwidth': OperatorType.PCIE_BANDWIDTH,
-            'network_stress': OperatorType.NETWORK_STRESS
+            'network_stress': OperatorType.NETWORK_STRESS,
+            'fp8_linear': OperatorType.FP8_LINEAR
         }
         
         if operator_type not in type_mapping:
@@ -108,8 +223,7 @@ class UniversalOperatorComparator:
             return [tc.name for tc in test_cases]
         return []
         
-    def run_comparison(self, operator_type: str, test_case_names: Optional[List[str]] = None,
-                      implementation_names: Optional[List[str]] = None,
+    def run(self, operator_type: str, implementations: List[str] = None, test_cases: List[str] = None,
                       warmup_runs: int = 5, test_runs: int = 20, 
                       collect_outputs: bool = False) -> Tuple[Dict[str, List[ImplementationResult]], Dict[str, Dict[str, torch.Tensor]]]:
         """Run comparison for a specific operator"""
@@ -123,7 +237,8 @@ class UniversalOperatorComparator:
             'tcp_bandwidth': OperatorType.TCP_BANDWIDTH,
             'rdma_bandwidth': OperatorType.RDMA_BANDWIDTH,
             'pcie_bandwidth': OperatorType.PCIE_BANDWIDTH,
-            'network_stress': OperatorType.NETWORK_STRESS
+            'network_stress': OperatorType.NETWORK_STRESS,
+            'fp8_linear': OperatorType.FP8_LINEAR
         }
         
         if operator_type not in type_mapping:
@@ -134,22 +249,24 @@ class UniversalOperatorComparator:
             raise ValueError(f"Operator {operator_type} not registered")
             
         operator = self.operators[op_type]
-        test_cases = operator.get_test_cases()
+        all_test_cases = operator.get_test_cases()
         
         # Filter test cases
-        if test_case_names:
-            test_cases = [tc for tc in test_cases if tc.name in test_case_names]
+        if test_cases:
+            filtered_test_cases = [tc for tc in all_test_cases if tc.name in test_cases]
+        else:
+            filtered_test_cases = all_test_cases
             
         results = {}
         output_results = {}
         
-        for test_case in test_cases:
+        for test_case in filtered_test_cases:
             print(f"\n=== Testing {operator_type.upper()} - {test_case.name} ===")
             print(f"Description: {test_case.description}")
             print(f"Input shapes: {test_case.input_shapes}")
             
             case_results = operator.run_comparison(
-                test_case, implementation_names, warmup_runs, test_runs
+                test_case, implementations, warmup_runs, test_runs
             )
             
             # Collect outputs if requested
@@ -158,7 +275,7 @@ class UniversalOperatorComparator:
                 inputs = operator.generate_inputs(test_case)
                 
                 for impl_name in operator.implementations:
-                    if implementation_names is None or impl_name in implementation_names:
+                    if implementations is None or impl_name in implementations:
                         try:
                             impl_info = operator.implementations[impl_name]
                             impl_func = impl_info['function']
@@ -535,7 +652,7 @@ class UniversalOperatorComparator:
 def main():
     parser = argparse.ArgumentParser(description='Universal Operator Comparison Tool')
     parser.add_argument('--operator', choices=['matmul', 'vector_add', 'relu', 'rmsnorm', 'rdma_stress', 
-                                               'tcp_bandwidth', 'rdma_bandwidth', 'pcie_bandwidth', 'network_stress'],
+                                               'tcp_bandwidth', 'rdma_bandwidth', 'pcie_bandwidth', 'network_stress', 'fp8_linear'],
                        help='Operator type to test')
     parser.add_argument('--test-cases', nargs='+', 
                        help='Test cases to run (default: all)')
@@ -562,6 +679,88 @@ def main():
     parser.add_argument('--list-test-cases', action='store_true',
                        help='List test cases for the specified operator')
     
+    # FP8 Linear adaptive mode options
+    parser.add_argument('--adaptive', action='store_true',
+                       help='Use adaptive mode - automatically select optimal test cases and backends based on GPU')
+    parser.add_argument('--stress-tests', action='store_true',
+                       help='Include stress tests (requires high-memory GPU)')
+    parser.add_argument('--profile-only', action='store_true',
+                       help='Profile GPU capabilities only (no benchmarking)')
+    parser.add_argument('--config', choices=['h100_quick_validation', 'h100_performance_suite', 'h100_peak_stress',
+                                            'b200_performance_suite', 'b200_peak_stress'],
+                       help='Use predefined configuration for specific GPU class')
+    
+    args = parser.parse_args()
+    
+    # Initialize comparator and register operators
+    comparator = UniversalOperatorComparator()
+    
+    # Profile GPU if adaptive mode or profile-only is requested
+    if args.adaptive or args.profile_only or args.config:
+        gpu_profiler = GPUProfiler()
+        gpu_config = gpu_profiler.get_adaptive_config()
+        
+        print("=" * 60)
+        print("GPU CAPABILITY ANALYSIS")
+        print("=" * 60)
+        print(f"Device: {gpu_config['device_name']}")
+        print(f"GPU Class: {gpu_config['gpu_class']}")
+        print(f"Memory: {gpu_config['memory_gb']:.1f} GB")
+        print(f"Compute Capability: {gpu_config['compute_capability']}")
+        print(f"Theoretical Peak FP8: {gpu_config['theoretical_peak_flops']/1e12:.1f} TFLOPS")
+        print(f"Memory Factor: {gpu_config['memory_factor']:.2f}")
+        
+        if args.profile_only:
+            print("\nRECOMMENDED CONFIGURATION:")
+            print(f"Test Cases: {', '.join(gpu_config['recommended_test_cases'][:3])}")
+            print(f"Backends: {', '.join(gpu_config['recommended_backends'])}")
+            return 0
+    
+    # Handle predefined configurations
+    if args.config:
+        configs = FP8BenchmarkConfigs()
+        if args.config.startswith('h100'):
+            config_dict = configs.get_h100_configs()[args.config]
+        elif args.config.startswith('b200'):
+            config_dict = configs.get_b200_configs()[args.config]
+        else:
+            print(f"[ERROR] Unknown configuration: {args.config}")
+            return 1
+        
+        # Override args with config values
+        args.operator = 'fp8_linear'
+        args.test_cases = config_dict['test_cases']
+        args.implementations = config_dict['backends']
+        args.runs = config_dict['runs']
+        args.warmup = config_dict['warmup']
+        args.plot = True
+        
+        print(f"\nUSING PREDEFINED CONFIG: {args.config}")
+        print(f"Test Cases: {', '.join(args.test_cases)}")
+        print(f"Expected Efficiency: {config_dict['target_efficiency']}%")
+    
+    # Handle adaptive mode
+    elif args.adaptive:
+        if not torch.cuda.is_available():
+            print("[ERROR] Adaptive mode requires CUDA")
+            return 1
+            
+        # Use GPU profiler recommendations
+        args.operator = 'fp8_linear'
+        args.test_cases = gpu_config['recommended_test_cases']
+        args.implementations = gpu_config['recommended_backends']
+        args.plot = True
+        
+        # Add stress tests if requested and GPU supports it
+        if args.stress_tests and gpu_config['memory_factor'] >= 0.8:
+            stress_test = f"{gpu_config['gpu_class'].lower()}_peak_stress"
+            if stress_test not in args.test_cases:
+                args.test_cases.append(stress_test)
+        
+        print(f"\nADAPTIVE MODE FOR {gpu_config['gpu_class']}")
+        print(f"Selected Test Cases: {', '.join(args.test_cases)}")
+        print(f"Selected Backends: {', '.join(args.implementations)}")
+
     args = parser.parse_args()
     
     # Create comparator and register operators
@@ -623,6 +822,12 @@ def main():
     except ImportError as e:
         print(f"[WARN] Network Stress operator not available: {e}")
     
+    try:
+        from operators.fp8_linear_operator import FP8LinearOperator
+        comparator.register_operator(FP8LinearOperator())
+    except ImportError as e:
+        print(f"[WARN] FP8 Linear operator not available: {e}")
+    
     # Handle list commands first
     if args.list_operators:
         print("Available operators:")
@@ -679,7 +884,8 @@ def main():
             'tcp_bandwidth': OperatorType.TCP_BANDWIDTH,
             'rdma_bandwidth': OperatorType.RDMA_BANDWIDTH,
             'pcie_bandwidth': OperatorType.PCIE_BANDWIDTH,
-            'network_stress': OperatorType.NETWORK_STRESS
+            'network_stress': OperatorType.NETWORK_STRESS,
+            'fp8_linear': OperatorType.FP8_LINEAR
         }
         
         if args.operator not in type_mapping:
@@ -721,8 +927,8 @@ def main():
         
         return 0
     
-    results, output_results = comparator.run_comparison(
-        args.operator, args.test_cases, args.implementations,
+    results, output_results = comparator.run(
+        args.operator, args.implementations, args.test_cases,
         args.warmup, args.runs, collect_outputs=args.output_diff
     )
     

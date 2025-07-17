@@ -27,6 +27,7 @@ class OperatorType(Enum):
     RDMA_BANDWIDTH = "rdma_bandwidth"
     PCIE_BANDWIDTH = "pcie_bandwidth"
     NETWORK_STRESS = "network_stress"
+    FP8_LINEAR = "fp8_linear"
 
 @dataclass
 class OperatorTestCase:
