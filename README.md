@@ -1,6 +1,6 @@
 # Universal Operator Benchmarking Framework
 
-A flexible framework for comparing operator implementations across PyTorch, CUDA, CuPy, and other backends.
+A flexible framework for comparing operator implementations across PyTorch, CUDA, CuPy, and other backends, with specialized high-performance testing for H100/B200 class GPUs.
 
 ## Quick Start
 
@@ -18,7 +18,30 @@ A flexible framework for comparing operator implementations across PyTorch, CUDA
 python run_comparator.py --list-operators
 ```
 
-### 3. Run Benchmarks
+### 3. High-Performance FP8 Testing (H100/B200)
+
+For high-end GPU testing with automatic optimization:
+
+```bash
+# Auto-detect GPU and run optimal high-performance tests
+python tools/operator_comparator_tool.py --operator fp8_linear --adaptive
+
+# Include stress tests for maximum performance
+python tools/operator_comparator_tool.py --operator fp8_linear --adaptive --stress-tests
+
+# Profile GPU capabilities only
+python tools/operator_comparator_tool.py --adaptive --profile-only
+
+# Use predefined H100 configuration
+python tools/operator_comparator_tool.py --config h100_performance_suite --plot
+
+# B200 stress testing
+python tools/operator_comparator_tool.py --config b200_peak_stress --plot
+```
+
+### 4. Standard Benchmarks
+
+### 4. Standard Benchmarks
 
 The framework provides two modes:
 
@@ -27,10 +50,10 @@ Pure performance benchmarking:
 
 ```bash
 # Basic performance comparison
-python run_comparator.py --operator matmul --test-cases small_square
+python tools/operator_comparator_tool.py --operator matmul --test-cases small_square
 
 # With charts
-python run_comparator.py --operator matmul --test-cases small_square --plot
+python tools/operator_comparator_tool.py --operator matmul --test-cases small_square --plot
 ```
 
 **Sample Output:**
@@ -46,7 +69,7 @@ Precision verification with baseline reference:
 
 ```bash
 # Accuracy comparison
-python run_comparator.py --operator matmul --test-cases small_square --accuracy-only
+python tools/operator_comparator_tool.py --operator matmul --test-cases small_square --accuracy-only
 ```
 
 **Sample Output:**
@@ -65,11 +88,105 @@ cuda_shared: PASS (tolerance: 0.0001)
 - **VectorAdd**: Element-wise vector addition
 - **ReLU**: Rectified Linear Unit activation
 - **RMSNorm**: Root Mean Square Normalization
+- **FP8 Linear**: High-performance FP8 linear layers with H100/B200 optimization
+  - Real implementations: PyTorch BF16 (baseline), Transformer Engine, CUTLASS, cuBLAS backends
+  - TFLOPS to PFLOPS scale test cases for high-end GPUs
+  - Auto-adaptive GPU detection and optimal configuration selection
+  - Real-world LLM workload scenarios (LLaMA3-405B, GPT-4 scale)
 
 ### Network Operators
 - **TCP Bandwidth**: TCP network testing
 - **RDMA Bandwidth**: RDMA network testing  
 - **PCIe Bandwidth**: GPU memory bandwidth testing
+
+## FP8 Linear High-Performance Benchmarking
+
+The FP8 Linear operator provides comprehensive benchmarking optimized for H100/B200 class GPUs with TFLOPS to PFLOPS scale workloads:
+
+### Quick Start with Auto-Adaptive Testing
+```bash
+# Automatically detect GPU and run optimal tests
+python tools/operator_comparator_tool.py --operator fp8_linear --adaptive
+
+# Include stress tests for maximum performance
+python tools/operator_comparator_tool.py --operator fp8_linear --adaptive --stress-tests
+
+# Profile GPU capabilities only
+python tools/operator_comparator_tool.py --adaptive --profile-only
+```
+
+### Predefined Configurations
+```bash
+# H100 optimized test suite
+python tools/operator_comparator_tool.py --config h100_performance_suite --plot
+
+# B200 stress testing
+python tools/operator_comparator_tool.py --config b200_peak_stress --plot
+
+# Quick validation
+python tools/operator_comparator_tool.py --config h100_quick_validation --plot
+```
+
+### Manual High-Performance Testing
+```bash
+# H100 optimized test suite
+python tools/operator_comparator_tool.py --operator fp8_linear \
+  --test-cases h100_target_small h100_target_medium h100_target_large \
+  --plot --runs 5
+
+# B200 stress testing
+python tools/operator_comparator_tool.py --operator fp8_linear \
+  --test-cases b200_peak_stress --runs 3 --plot
+
+# Real-world LLM workloads
+python tools/operator_comparator_tool.py --operator fp8_linear \
+  --test-cases llama3_405b_ffn_up llama3_405b_ffn_down gpt4_scale_attention \
+  --plot --runs 3
+```
+
+### Performance Test Cases
+
+**H100 Optimized (1000 TFLOPS FP8 peak):**
+- `h100_target_small`: 8K×8K→8K (1.07 TFLOPS)
+- `h100_target_medium`: 16K×12K→16K (6.44 TFLOPS)  
+- `h100_target_large`: 32K×16K→32K (35.18 TFLOPS)
+- `h100_peak_stress`: 64K×24K→48K (157.29 TFLOPS)
+
+**B200 Optimized (2500 TFLOPS FP8 peak):**
+- `b200_target_medium`: 64K×32K→64K (274.88 TFLOPS)
+- `b200_target_large`: 128K×48K→96K (1.23 PFLOPS)
+- `b200_peak_stress`: 256K×64K→128K (4.40 PFLOPS)
+
+**Real-World LLM Workloads:**
+- `llama3_405b_ffn_up/down`: LLaMA3-405B scale FFN projections
+- `gpt4_scale_attention`: GPT-4 scale attention (824+ TFLOPS)
+
+### Configuration Management
+```bash
+# List available predefined configurations
+python tools/operator_comparator_tool.py --config --help
+
+# Use H100 performance suite
+python tools/operator_comparator_tool.py --config h100_performance_suite --plot
+
+# Use B200 peak stress configuration
+python tools/operator_comparator_tool.py --config b200_peak_stress --plot
+```
+
+**Available Backends:**
+- PyTorch BF16 (baseline - always available)
+- Transformer Engine (optional - if installed)
+- CUTLASS/cuBLAS (optional - if available)
+
+**Note**: Only real, functional backends are used. No simulated or mock implementations are included.
+
+**Features:**
+- Automatic chart generation with --plot
+- H100/B200 optimized test cases (1.07 TFLOPS to 4.40 PFLOPS)  
+- Performance analysis and efficiency metrics
+- Auto-adaptive GPU detection and configuration
+- Memory bandwidth optimization tests
+- Real-world LLM workload scenarios
 
 ## Network Testing
 
@@ -83,18 +200,18 @@ python run_network_tests.py --rdma     # RDMA only
 
 ```bash
 # List operators and implementations
-python run_comparator.py --list-operators
-python run_comparator.py --operator matmul --list-implementations
+python tools/operator_comparator_tool.py --list-operators
+python tools/operator_comparator_tool.py --operator matmul --list-implementations
 
 # Performance benchmarking
-python run_comparator.py --operator matmul --test-cases small_square
-python run_comparator.py --operator matmul --test-cases small_square --warmup 10 --runs 50
+python tools/operator_comparator_tool.py --operator matmul --test-cases small_square
+python tools/operator_comparator_tool.py --operator matmul --test-cases small_square --warmup 10 --runs 50
 
 # Accuracy comparison
-python run_comparator.py --operator matmul --test-cases small_square --accuracy-only
+python tools/operator_comparator_tool.py --operator matmul --test-cases small_square --accuracy-only
 
 # Custom output
-python run_comparator.py --operator matmul --test-cases small_square --output-dir results --plot
+python tools/operator_comparator_tool.py --operator matmul --test-cases small_square --output-dir results --plot
 ```
 
 ## Requirements
@@ -102,6 +219,17 @@ python run_comparator.py --operator matmul --test-cases small_square --output-di
 - **System**: Linux, GCC with C++17, CMake 3.10+
 - **Python**: 3.8+ with PyTorch, NumPy
 - **Optional**: Matplotlib (charts), RDMA tools (network testing)
+
+### FP8 Backend Support
+
+- **cuBLAS/CUTLASS FP8**: Built-in support via custom `linear.py` module
+- **Transformer Engine**: Advanced FP8 optimization (requires H100/B200 class GPU)
+  ```bash
+  pip install transformer-engine[pytorch]  # For hardware FP8 acceleration
+  ```
+- **GPU Requirements**: 
+  - H100/H200/B200: Full hardware FP8 support
+  - Other GPUs: Software FP8 emulation (see `docs/FP8_GPU_SUPPORT_GUIDE.md`)
 
 Use `./build.sh install-deps` for automatic dependency installation.
 

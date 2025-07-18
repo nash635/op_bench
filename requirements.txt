@@ -1,0 +1,8 @@
+# FP8 Linear Operator Dependencies
+torch>=2.0.0
+numpy>=1.21.0
+
+# Optional FP8 backends
+transformer-engine>=1.0.0  # For Transformer Engine FP8 backend
+# cutlass  # Custom CUTLASS FP8 backend (install from source)
+# linear   # Custom linear module (install from source)

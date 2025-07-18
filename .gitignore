@@ -73,3 +73,6 @@ matplotlib_cache_*/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Test results (generated output files)
+test_results/
