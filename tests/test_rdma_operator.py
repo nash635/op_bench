@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
 Test script for RDMA Stress Operator
+Note: This test has known issues with the implementation dict structure.
+It's kept for demonstration but may need fixes.
 """
 
 import sys

@@ -317,7 +317,7 @@ class FP8LinearOperator(BaseOperator):
                 params_dtype=dtype
             )
         elif backend in ["cutlass", "cublas"]:
-            return self.Fp8Linear(
+            return self.fp8_linear(
                 in_features=in_features, 
                 out_features=out_features, 
                 bias=False, 

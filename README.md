@@ -220,6 +220,17 @@ python tools/operator_comparator_tool.py --operator matmul --test-cases small_sq
 - **Python**: 3.8+ with PyTorch, NumPy
 - **Optional**: Matplotlib (charts), RDMA tools (network testing)
 
+### FP8 Backend Support
+
+- **cuBLAS/CUTLASS FP8**: Built-in support via custom `linear.py` module
+- **Transformer Engine**: Advanced FP8 optimization (requires H100/B200 class GPU)
+  ```bash
+  pip install transformer-engine[pytorch]  # For hardware FP8 acceleration
+  ```
+- **GPU Requirements**: 
+  - H100/H200/B200: Full hardware FP8 support
+  - Other GPUs: Software FP8 emulation (see `docs/FP8_GPU_SUPPORT_GUIDE.md`)
+
 Use `./build.sh install-deps` for automatic dependency installation.
 
 ## Profiling
