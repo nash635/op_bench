@@ -117,7 +117,7 @@ class GPUProfiler:
             test_cases = ['quick_validation', 'medium_baseline']
         
         config['recommended_test_cases'] = [tc for tc in test_cases if tc is not None]
-        config['recommended_backends'] = ['pytorch_bf16', 'simulated_fp8_fast', 'simulated_fp8_memory_opt']
+        config['recommended_backends'] = ['pytorch_bf16']
         
         return config
 
@@ -130,7 +130,7 @@ class FP8BenchmarkConfigs:
         return {
             "h100_quick_validation": {
                 "test_cases": ["quick_validation", "medium_baseline"],
-                "backends": ["pytorch_bf16", "simulated_fp8_fast"],
+                "backends": ["pytorch_bf16"],
                 "runs": 3, "warmup": 2, "target_efficiency": 60
             },
             "h100_performance_suite": {
@@ -139,7 +139,7 @@ class FP8BenchmarkConfigs:
             },
             "h100_peak_stress": {
                 "test_cases": ["h100_peak_stress"],
-                "backends": ["simulated_fp8_fast", "simulated_fp8_memory_opt"],
+                "backends": ["pytorch_bf16"],
                 "runs": 3, "warmup": 2, "target_efficiency": 80
             }
         }
@@ -154,7 +154,7 @@ class FP8BenchmarkConfigs:
             },
             "b200_peak_stress": {
                 "test_cases": ["b200_peak_stress"],
-                "backends": ["simulated_fp8_fast"],
+                "backends": ["pytorch_bf16"],
                 "runs": 3, "warmup": 2, "target_efficiency": 85
             }
         }
@@ -660,8 +660,8 @@ def main():
                        help='Implementations to test (default: all)')
     parser.add_argument('--output', default='comparison',
                        help='Output file prefix')
-    parser.add_argument('--output-dir', default='.',
-                       help='Output directory')
+    parser.add_argument('--output-dir', default='test_results',
+                       help='Output directory (default: test_results)')
     parser.add_argument('--warmup', type=int, default=5,
                        help='Warmup rounds')
     parser.add_argument('--runs', type=int, default=20,

@@ -169,7 +169,7 @@ python tools/operator_comparator_tool.py \
     --accuracy-only
 ```
 
-# Custom output directory
+# Custom output directory (default: test_results)
 python operator_comparator_tool.py \
     --operator matmul \
     --output-dir results/ \
@@ -213,9 +213,11 @@ python operator_comparator_tool.py \
 
 ## Output Formats
 
+All test results are saved to the `test_results` directory by default. You can specify a custom output directory using `--output-dir`.
+
 ### 1. Markdown Report
 - Detailed performance comparison tables
-- Test case descriptions
+- Test case descriptions  
 - Implementation availability status
 
 ### 2. JSON Data

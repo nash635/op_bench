@@ -89,9 +89,9 @@ cuda_shared: PASS (tolerance: 0.0001)
 - **ReLU**: Rectified Linear Unit activation
 - **RMSNorm**: Root Mean Square Normalization
 - **FP8 Linear**: High-performance FP8 linear layers with H100/B200 optimization
-  - PyTorch BF16, Transformer Engine, CUTLASS, cuBLAS backends
-  - TFLOPS to PFLOPS scale test cases
-  - Auto-adaptive GPU detection and optimization
+  - Real implementations: PyTorch BF16 (baseline), Transformer Engine, CUTLASS, cuBLAS backends
+  - TFLOPS to PFLOPS scale test cases for high-end GPUs
+  - Auto-adaptive GPU detection and optimal configuration selection
   - Real-world LLM workload scenarios (LLaMA3-405B, GPT-4 scale)
 
 ### Network Operators
@@ -174,18 +174,19 @@ python tools/operator_comparator_tool.py --config b200_peak_stress --plot
 ```
 
 **Available Backends:**
-- PyTorch BF16 (baseline)
-- Simulated FP8 Fast (high-performance)
-- Simulated FP8 Memory-Optimized
-- Transformer Engine (optional)
-- CUTLASS/cuBLAS (optional)
+- PyTorch BF16 (baseline - always available)
+- Transformer Engine (optional - if installed)
+- CUTLASS/cuBLAS (optional - if available)
+
+**Note**: Only real, functional backends are used. No simulated or mock implementations are included.
 
 **Features:**
-- CHART Automatic chart generation
-- TARGET H100/B200 optimized test cases (1.07 TFLOPS to 4.40 PFLOPS)
-- CHART Performance analysis and efficiency metrics
+- Automatic chart generation with --plot
+- H100/B200 optimized test cases (1.07 TFLOPS to 4.40 PFLOPS)  
+- Performance analysis and efficiency metrics
 - Auto-adaptive GPU detection and configuration
 - Memory bandwidth optimization tests
+- Real-world LLM workload scenarios
 
 ## Network Testing
 

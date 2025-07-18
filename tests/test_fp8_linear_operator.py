@@ -74,7 +74,7 @@ class TestFP8LinearOperator(unittest.TestCase):
         inputs = self.operator.generate_inputs(test_case)
         
         try:
-            result = self.operator._pytorch_bf16_impl(inputs, test_case)
+            result = self.operator._pytorch_bf16_impl(inputs, test_case.additional_params)
             self.assertIsInstance(result, torch.Tensor)
             
             # Check output shape
