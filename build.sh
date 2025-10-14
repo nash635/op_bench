@@ -20,6 +20,8 @@ RUN_BENCHMARKS=false
 CHECK_DEPS=false
 SKIP_CUDA=false
 PYTHON_EXECUTABLE="python3"
+CUDA_ARCH_LIST=""
+CUDA_ARCH_LIST=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -94,6 +96,7 @@ OPTIONS:
     --benchmark        Run benchmarks after building
     --skip-cuda        Skip CUDA extension build (framework only)
     --force-cuda       Force CUDA extension build attempt
+    --cuda-arch LIST   Set TORCH_CUDA_ARCH_LIST for CUDA builds (e.g., 6.0 or "8.0;8.6")
 
 EXAMPLES:
     $0                          # Build with CUDA extension (default)
@@ -237,7 +240,11 @@ build_with_cmake() {
     
     # Add environment variables to suppress warnings
     export PYTORCH_NVCC_FLAGS="-Xcompiler -fPIC"
-    export TORCH_CUDA_ARCH_LIST="6.0"
+    if [ -n "${TORCH_CUDA_ARCH_LIST:-}" ]; then
+        log_info "Using TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}"
+    else
+        log_info "TORCH_CUDA_ARCH_LIST not set; PyTorch will determine target architectures"
+    fi
     
     # Add PyTorch CMake path
     TORCH_CMAKE_PATH=$(get_torch_cmake_config)
@@ -804,6 +811,14 @@ while [[ $# -gt 0 ]]; do
             SKIP_CUDA=false
             shift
             ;;
+        --cuda-arch)
+            if [ -z "${2:-}" ]; then
+                log_error "--cuda-arch requires an argument"
+                exit 1
+            fi
+            CUDA_ARCH_LIST="$2"
+            shift 2
+            ;;
         build)
             # Default command
             shift
@@ -857,6 +872,13 @@ cd "$(dirname "$0")"
 
 echo "[INFO] $PROJECT_NAME Build Script"
 echo "============================================================"
+
+if [ -n "$CUDA_ARCH_LIST" ]; then
+    export TORCH_CUDA_ARCH_LIST="$CUDA_ARCH_LIST"
+    log_info "TORCH_CUDA_ARCH_LIST set to $TORCH_CUDA_ARCH_LIST"
+else
+    log_info "TORCH_CUDA_ARCH_LIST not specified; relying on PyTorch defaults"
+fi
 
 # Check dependencies
 if ! check_dependencies; then

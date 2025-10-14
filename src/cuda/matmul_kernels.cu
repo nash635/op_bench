@@ -6,7 +6,7 @@
 #define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
 #define CHECK_INPUT(x) CHECK_CUDA(x); CHECK_CONTIGUOUS(x)
 
-// 辅助函数
+// Helper utility
 __device__ __host__ inline int cdiv(int a, int b) { 
     return (a + b - 1) / b; 
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-CUDA MatMul 性能分析工具 - 权限友好版本
-当 Nsight Compute 权限不足时，提供替代的分析方法
+CUDA MatMul profiling helper for permission-restricted environments.
+Provides alternative analysis paths when Nsight Compute access is limited.
 """
 
 import torch
@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import List, Dict, Tuple
 
 def check_ncu_permissions() -> bool:
-    """检查 NCU 权限"""
+    """Check whether Nsight Compute can access performance counters."""
     try:
-        # 创建一个简单的测试脚本
+        # Create a lightweight test script
         test_script = Path("temp_permission_test.py")
         test_script.write_text('''
 import torch
@@ -25,14 +25,14 @@ if torch.cuda.is_available():
     print("Simple CUDA test completed")
 ''')
         
-        # 尝试运行 NCU
+        # Attempt to run NCU
         result = subprocess.run([
             'ncu', '--target-processes', 'all', '--launch-count', '1',
             '--export', 'temp_test.ncu-rep', '--force-overwrite',
             'python', str(test_script)
         ], capture_output=True, text=True, timeout=30)
         
-        # 清理
+        # Clean up temporary files
         test_script.unlink(missing_ok=True)
         Path('temp_test.ncu-rep').unlink(missing_ok=True)
         
@@ -47,48 +47,48 @@ if torch.cuda.is_available():
         return False
 
 def provide_permission_guidance():
-    """提供权限设置指导"""
+    """Offer guidance for configuring profiling permissions."""
     print("\n" + "="*60)
-    print("Nsight Compute 权限设置指导")
+    print("Nsight Compute permission guidance")
     print("="*60)
-    print("\nNsight Compute 需要特殊权限来访问 GPU 性能计数器。")
-    print("请尝试以下解决方案：\n")
+    print("\nNsight Compute needs elevated permissions to access GPU performance counters.")
+    print("Try the following options:\n")
     
-    print("方案 1: 临时使用 sudo 运行")
+    print("Option 1: Temporarily run with sudo")
     print("  sudo python ncu_profiler.py --sizes 512")
     print()
     
-    print("方案 2: 设置驱动参数 (需要重启)")
+    print("Option 2: Adjust driver parameters (requires reboot)")
     print("  echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf")
     print("  sudo update-initramfs -u")
     print("  sudo reboot")
     print()
     
-    print("方案 3: 使用 Docker 容器")
+    print("Option 3: Use a Docker container")
     print("  nvidia-docker run --privileged -it nvidia/cuda:12.0-devel")
     print()
     
-    print("方案 4: 使用替代的性能分析方法")
-    print("  - PyTorch Profiler (无权限要求)")
-    print("  - 手动时间测量和 GFLOPS 计算")
-    print("  - Nsight Systems (权限要求较低)")
+    print("Option 4: Switch to alternative profiling approaches")
+    print("  - PyTorch Profiler (no extra permissions)")
+    print("  - Manual timing with GFLOPS calculation")
+    print("  - Nsight Systems (lower permission requirements)")
     print()
     
-    print("注意：在生产环境中，建议只在需要时临时启用 profiling 权限。")
+    print("Note: In production, enable profiling permissions only when necessary.")
 
 def run_pytorch_profiler_analysis(matrix_sizes: List[int], output_dir: Path):
-    """使用 PyTorch Profiler 进行分析 (无权限要求)"""
+    """Profile CUDA kernels using PyTorch Profiler without special permissions."""
     
     print("\n" + "="*50)
-    print("使用 PyTorch Profiler 进行性能分析")
+    print("Profiling performance with PyTorch Profiler")
     print("="*50)
     
-    # 加载扩展
+    # Load the CUDA extension if possible
     matmul_cuda_ext = None
     try:
         # First try direct import
         import matmul_cuda_ext
-        print("[PASS] CUDA扩展加载成功 (直接导入)")
+        print("[PASS] CUDA extension loaded via direct import")
     except ImportError:
         try:
             # Try JIT compilation with correct paths
@@ -108,8 +108,8 @@ def run_pytorch_profiler_analysis(matrix_sizes: List[int], output_dir: Path):
             
             # Check if source files exist
             if not all(os.path.exists(src) for src in sources):
-                print(f"[WARN] CUDA源文件未找到: {sources}")
-                print("[INFO] 将只测试 PyTorch 内置实现")
+                print(f"[WARN] CUDA source files not found: {sources}")
+                print("[INFO] Falling back to the PyTorch built-in implementation only")
             else:
                 matmul_cuda_ext = load(
                     name='matmul_cuda_ext',
@@ -118,15 +118,15 @@ def run_pytorch_profiler_analysis(matrix_sizes: List[int], output_dir: Path):
                     extra_cuda_cflags=['-O3', '--expt-relaxed-constexpr', '-std=c++17'],
                     verbose=False
                 )
-                print("[PASS] CUDA扩展加载成功 (JIT编译)")
+                print("[PASS] CUDA extension loaded via JIT compilation")
         except Exception as e:
-            print(f"[WARN] CUDA扩展加载失败: {e}")
-            print("[INFO] 将只测试 PyTorch 内置实现")
+            print(f"[WARN] Failed to load CUDA extension: {e}")
+            print("[INFO] Only the PyTorch built-in implementation will be profiled")
             matmul_cuda_ext = None
     
     output_dir.mkdir(exist_ok=True)
     
-    # 定义实现
+    # Register implementations to evaluate
     implementations = {
         'pytorch_builtin': lambda a, b: torch.mm(a, b),
     }
@@ -144,9 +144,9 @@ def run_pytorch_profiler_analysis(matrix_sizes: List[int], output_dir: Path):
     results = {}
     
     for size in matrix_sizes:
-        print(f"\n分析矩阵大小: {size}x{size}")
+        print(f"\nProfiling matrix size: {size}x{size}")
         
-        # 创建测试数据
+        # Create test data
         torch.manual_seed(42)
         A = torch.randn(size, size, device='cuda', dtype=torch.float32).contiguous()
         B = torch.randn(size, size, device='cuda', dtype=torch.float32).contiguous()
@@ -154,14 +154,14 @@ def run_pytorch_profiler_analysis(matrix_sizes: List[int], output_dir: Path):
         size_results = {}
         
         for name, func in implementations.items():
-            print(f"  分析 {name}...")
+            print(f"  Profiling {name}...")
             
-            # 预热
+            # Warmup iterations
             for _ in range(3):
                 _ = func(A, B)
                 torch.cuda.synchronize()
             
-            # 使用 PyTorch Profiler
+            # Measure with PyTorch Profiler
             with torch.profiler.profile(
                 activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
                 record_shapes=True,
@@ -172,15 +172,15 @@ def run_pytorch_profiler_analysis(matrix_sizes: List[int], output_dir: Path):
                     result = func(A, B)
                     torch.cuda.synchronize()
             
-            # 保存 profile 结果
+            # Save profiler trace
             profile_file = output_dir / f"{name}_{size}x{size}_pytorch_profile.json"
             prof.export_chrome_trace(str(profile_file))
             
-            # 计算性能指标
+            # Compute basic performance metrics
             events = prof.events()
             cuda_events = [e for e in events if e.device_type == torch.profiler.DeviceType.CUDA]
             if cuda_events:
-                avg_time = sum(e.cuda_time_total for e in cuda_events) / len(cuda_events) / 1000  # 转换为毫秒
+                avg_time = sum(e.cuda_time_total for e in cuda_events) / len(cuda_events) / 1000  # Convert to ms
                 gflops = (2 * size ** 3) / (avg_time * 1e-3) / 1e9  # GFLOPS
                 
                 size_results[name] = {
@@ -189,121 +189,124 @@ def run_pytorch_profiler_analysis(matrix_sizes: List[int], output_dir: Path):
                     'profile_file': str(profile_file)
                 }
                 
-                print(f"    平均时间: {avg_time:.3f} ms")
-                print(f"    性能: {gflops:.1f} GFLOPS")
+                print(f"    Avg time: {avg_time:.3f} ms")
+                print(f"    Throughput: {gflops:.1f} GFLOPS")
         
         results[size] = size_results
     
-    # 生成报告
+    # Generate report
     report_file = output_dir / "pytorch_profiler_report.md"
     generate_pytorch_profiler_report(results, report_file)
     
-    print(f"\n[PASS] PyTorch Profiler 分析完成")
-    print(f"结果保存在: {output_dir}/")
-    print(f"查看报告: cat {report_file}")
-    print("使用 Chrome 浏览器打开 .json 文件查看详细的 profiling 时间线")
+    print(f"\n[PASS] PyTorch Profiler run complete")
+    print(f"Results saved in: {output_dir}/")
+    print(f"View summary: cat {report_file}")
+    print("Open the .json traces in Chrome's tracing viewer for detailed timelines")
 
 def generate_pytorch_profiler_report(results: Dict, report_file: Path):
-    """生成 PyTorch Profiler 报告"""
+    """Generate a Markdown report summarizing PyTorch Profiler runs."""
     
-    content = f'''# CUDA MatMul PyTorch Profiler 分析报告
+    content = f'''# CUDA MatMul PyTorch Profiler Report
 
-## 环境信息
-- 设备: {torch.cuda.get_device_name() if torch.cuda.is_available() else 'CPU'}
-- PyTorch 版本: {torch.__version__}
-- 生成时间: {time.strftime("%Y-%m-%d %H:%M:%S")}
+## Environment
+- Device: {torch.cuda.get_device_name() if torch.cuda.is_available() else 'CPU'}
+- PyTorch version: {torch.__version__}
+- Generated: {time.strftime("%Y-%m-%d %H:%M:%S")}
 
-## 性能分析结果
+## Performance Results
 
 '''
     
     for size, size_results in results.items():
-        content += f"### 矩阵大小: {size}x{size}\n\n"
-        content += "| 实现 | 平均时间 (ms) | 性能 (GFLOPS) | Profile 文件 |\n"
-        content += "|------|---------------|---------------|-------------|\n"
-        
+        content += f"### Matrix size: {size}x{size}\n\n"
+        content += "| Implementation | Avg Time (ms) | Throughput (GFLOPS) | Profile File |\n"
+        content += "|----------------|---------------|---------------------|--------------|\n"
+
         for impl_name, metrics in size_results.items():
-            content += f"| {impl_name} | {metrics['avg_time_ms']:.3f} | {metrics['gflops']:.1f} | {Path(metrics['profile_file']).name} |\n"
-        
+            content += (
+                f"| {impl_name} | {metrics['avg_time_ms']:.3f} | "
+                f"{metrics['gflops']:.1f} | {Path(metrics['profile_file']).name} |\n"
+            )
+
         content += "\n"
     
-    content += '''## 使用 PyTorch Profiler 的优势
+    content += '''## Benefits of PyTorch Profiler
 
-1. **无权限要求**: 不需要特殊的系统权限
-2. **详细的时间线**: 可以看到 CPU 和 GPU 的执行时间线
-3. **内存分析**: 包含内存使用情况分析
-4. **易于集成**: 直接集成在 PyTorch 代码中
+1. **No special permissions**: Works without elevated system access
+2. **Detailed timelines**: Capture both CPU and GPU execution
+3. **Memory insights**: Includes memory usage analysis
+4. **Easy integration**: Built directly into PyTorch
 
-## 查看详细结果
+## Inspecting Results
 
-### Chrome Tracing 可视化
+### Chrome Tracing visualization
 ```bash
-# 在 Chrome 浏览器中打开 chrome://tracing/
-# 然后加载 .json 文件查看详细的执行时间线
+# Open chrome://tracing/ in Google Chrome
+# Load the .json trace to inspect execution timelines
 ```
 
-### 命令行分析
+### Command-line analysis
 ```python
 import torch
 prof = torch.profiler.profile(...)
 print(prof.key_averages().table(sort_by="cuda_time_total"))
 ```
 
-## 与 Nsight Compute 的对比
+## Comparison with Nsight Compute
 
-| 特性 | PyTorch Profiler | Nsight Compute |
-|------|------------------|----------------|
-| 权限要求 | 无 | 需要管理员权限 |
-| 分析粒度 | 函数级 | 指令级 |
-| 内存分析 | 基本 | 详细 |
-| 可视化 | Chrome Tracing | 专业 GUI |
-| 使用难度 | 简单 | 复杂 |
+| Attribute | PyTorch Profiler | Nsight Compute |
+|-----------|------------------|----------------|
+| Permission requirement | None | Administrator privileges |
+| Analysis granularity | Function level | Instruction level |
+| Memory analysis | Basic | Detailed |
+| Visualization | Chrome tracing | Dedicated GUI |
+| Ease of use | Simple | Complex |
 
-## 优化建议
+## Optimization tips
 
-基于 PyTorch Profiler 的分析结果：
-1. 关注 CUDA kernel 的执行时间
-2. 查看内存分配和释放模式
-3. 分析 CPU-GPU 同步开销
-4. 对比不同实现的时间线差异
+Based on PyTorch Profiler insights:
+1. Focus on CUDA kernel execution time
+2. Inspect memory allocation and release patterns
+3. Evaluate CPU-GPU synchronization overheads
+4. Compare execution timelines across implementations
 '''
     
     with open(report_file, 'w') as f:
         f.write(content)
 
 def main():
-    parser = argparse.ArgumentParser(description='CUDA MatMul 性能分析 - 权限友好版本')
+    parser = argparse.ArgumentParser(description='CUDA MatMul profiling helper (permission friendly)')
     parser.add_argument('--sizes', nargs='+', type=int, default=[1024],
-                       help='矩阵大小列表 (默认: [1024])')
+                       help='List of square matrix sizes (default: [1024])')
     parser.add_argument('--output', '-o', default='profiling_analysis',
-                       help='输出目录 (默认: profiling_analysis)')
+                       help='Output directory (default: profiling_analysis)')
     parser.add_argument('--force-pytorch-profiler', action='store_true',
-                       help='强制使用 PyTorch Profiler')
+                       help='Force PyTorch Profiler even when Nsight Compute is available')
     
     args = parser.parse_args()
     
-    print("CUDA MatMul 性能分析工具")
+    print("CUDA MatMul profiling toolkit")
     print("=" * 50)
-    print(f"矩阵大小: {args.sizes}")
-    print(f"输出目录: {args.output}")
+    print(f"Matrix sizes: {args.sizes}")
+    print(f"Output directory: {args.output}")
     print()
     
     output_dir = Path(args.output)
     
-    # 检查 NCU 权限
+    # Check Nsight Compute permissions if applicable
     if not args.force_pytorch_profiler:
-        print("检查 Nsight Compute 权限...")
+        print("Checking Nsight Compute permissions...")
         if check_ncu_permissions():
-            print("[PASS] Nsight Compute 权限正常，可以使用 ncu_profiler.py")
-            print("运行: python ncu_profiler.py --sizes", ' '.join(map(str, args.sizes)))
+            print("[PASS] Nsight Compute permissions look good; you can use ncu_profiler.py")
+            print("Run: python ncu_profiler.py --sizes", ' '.join(map(str, args.sizes)))
             return 0
         else:
-            print("[FAIL] Nsight Compute 权限不足")
+            print("[FAIL] Nsight Compute lacks the required permissions")
             provide_permission_guidance()
             
-            print("\n使用 PyTorch Profiler 作为替代方案...")
+            print("\nFalling back to PyTorch Profiler...")
     
-    # 使用 PyTorch Profiler
+    # Use PyTorch Profiler
     run_pytorch_profiler_analysis(args.sizes, output_dir)
     
     return 0

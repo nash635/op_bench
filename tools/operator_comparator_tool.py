@@ -69,6 +69,7 @@ class UniversalOperatorComparator:
             'vector_add': OperatorType.VECTOR_ADD,
             'relu': OperatorType.ACTIVATION,
             'rmsnorm': OperatorType.ELEMENT_WISE,
+            'histogram': OperatorType.HISTOGRAM,
             'rdma_stress': OperatorType.RDMA_STRESS,
             'tcp_bandwidth': OperatorType.TCP_BANDWIDTH,
             'rdma_bandwidth': OperatorType.RDMA_BANDWIDTH,
@@ -92,6 +93,7 @@ class UniversalOperatorComparator:
             'vector_add': OperatorType.VECTOR_ADD,
             'relu': OperatorType.ACTIVATION,
             'rmsnorm': OperatorType.ELEMENT_WISE,
+            'histogram': OperatorType.HISTOGRAM,
             'rdma_stress': OperatorType.RDMA_STRESS,
             'tcp_bandwidth': OperatorType.TCP_BANDWIDTH,
             'rdma_bandwidth': OperatorType.RDMA_BANDWIDTH,
@@ -119,6 +121,7 @@ class UniversalOperatorComparator:
             'vector_add': OperatorType.VECTOR_ADD,
             'relu': OperatorType.ACTIVATION,
             'rmsnorm': OperatorType.ELEMENT_WISE,
+            'histogram': OperatorType.HISTOGRAM,
             'rdma_stress': OperatorType.RDMA_STRESS,
             'tcp_bandwidth': OperatorType.TCP_BANDWIDTH,
             'rdma_bandwidth': OperatorType.RDMA_BANDWIDTH,
@@ -534,7 +537,7 @@ class UniversalOperatorComparator:
         return chart_files
 def main():
     parser = argparse.ArgumentParser(description='Universal Operator Comparison Tool')
-    parser.add_argument('--operator', choices=['matmul', 'vector_add', 'relu', 'rmsnorm', 'rdma_stress', 
+    parser.add_argument('--operator', choices=['matmul', 'vector_add', 'relu', 'rmsnorm', 'histogram', 'rdma_stress', 
                                                'tcp_bandwidth', 'rdma_bandwidth', 'pcie_bandwidth', 'network_stress'],
                        help='Operator type to test')
     parser.add_argument('--test-cases', nargs='+', 
@@ -591,6 +594,12 @@ def main():
         comparator.register_operator(RMSNormOperator())
     except ImportError as e:
         print(f"[WARN] RMSNorm operator not available: {e}")
+
+    try:
+        from operators.histogram_operator import HistogramOperator
+        comparator.register_operator(HistogramOperator())
+    except ImportError as e:
+        print(f"[WARN] Histogram operator not available: {e}")
     
     try:
         from operators.rdma_stress_operator import RDMAStressOperator

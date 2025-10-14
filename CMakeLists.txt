@@ -35,13 +35,19 @@ include_directories(${Python3_INCLUDE_DIRS})
 include_directories(src/cuda)
 
 # Source files
-set(SOURCES
+set(MATMUL_SOURCES
     src/cuda/matmul_cuda_ext.cpp
     src/cuda/matmul_kernels.cu
 )
 
-# Create the extension library
-add_library(matmul_cuda_ext SHARED ${SOURCES})
+set(HISTOGRAM_SOURCES
+    src/cuda/histogram_cuda_ext.cpp
+    src/cuda/histogram_kernels.cu
+)
+
+# Create the extension libraries
+add_library(matmul_cuda_ext SHARED ${MATMUL_SOURCES})
+add_library(histogram_cuda_ext SHARED ${HISTOGRAM_SOURCES})
 
 # Set properties for the library
 set_target_properties(matmul_cuda_ext PROPERTIES
@@ -50,15 +56,25 @@ set_target_properties(matmul_cuda_ext PROPERTIES
     POSITION_INDEPENDENT_CODE ON
 )
 
+set_target_properties(histogram_cuda_ext PROPERTIES
+    PREFIX ""
+    SUFFIX ".so"
+    POSITION_INDEPENDENT_CODE ON
+)
+
 # Link libraries
 target_link_libraries(matmul_cuda_ext ${TORCH_LIBRARIES})
 target_link_libraries(matmul_cuda_ext CUDA::cudart CUDA::cublas)
+target_link_libraries(histogram_cuda_ext ${TORCH_LIBRARIES})
+target_link_libraries(histogram_cuda_ext CUDA::cudart)
 
 # Set CUDA architectures (adjust based on your GPU)
 set_property(TARGET matmul_cuda_ext PROPERTY CUDA_ARCHITECTURES 60 70 75 80 86)
+set_property(TARGET histogram_cuda_ext PROPERTY CUDA_ARCHITECTURES 60 70 75 80 86)
 
 # Compiler-specific options
 target_compile_definitions(matmul_cuda_ext PRIVATE ${TORCH_CXX_FLAGS})
+target_compile_definitions(histogram_cuda_ext PRIVATE ${TORCH_CXX_FLAGS})
 
 # Custom target for Python integration
 add_custom_target(python_build
@@ -95,7 +111,7 @@ add_custom_target(clean_all
 )
 
 # Install target
-install(TARGETS matmul_cuda_ext
+install(TARGETS matmul_cuda_ext histogram_cuda_ext
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )

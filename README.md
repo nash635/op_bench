@@ -65,6 +65,7 @@ cuda_shared: PASS (tolerance: 0.0001)
 - **VectorAdd**: Element-wise vector addition
 - **ReLU**: Rectified Linear Unit activation
 - **RMSNorm**: Root Mean Square Normalization
+- **Histogram**: Integer histogramming with CUDA acceleration
 
 ### Network Operators
 - **TCP Bandwidth**: TCP network testing

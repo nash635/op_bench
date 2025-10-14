@@ -20,11 +20,11 @@ from pathlib import Path
 from typing import List, Tuple, Dict, Optional, TYPE_CHECKING
 import json
 
-# 类型检查时导入 torch，运行时条件导入
+# Import torch for type checking; defer runtime import to avoid unnecessary dependency.
 if TYPE_CHECKING:
     import torch
 
-# 尝试导入 PyTorch，处理 sudo 环境下的库冲突
+# Attempt to import PyTorch and handle sudo-environment library conflicts.
 try:
     import torch
     from torch.utils.cpp_extension import load
@@ -34,12 +34,12 @@ except ImportError as e:
     print("[INFO] This may happen in sudo environments with UCX/UCC conflicts.")
     print("[INFO] Consider using PyTorch profiler instead: python tools/profiling_pytorch.py")
     TORCH_AVAILABLE = False
-    # 创建一个虚拟的 torch 模块用于避免 NameError
+    # Create a mock torch module to avoid NameError when PyTorch is unavailable.
     class MockTorch:
         class Tensor:
             pass
     torch = MockTorch()
-    # 仍然允许脚本继续运行，以便显示错误信息和建议
+    # Continue execution so the script can surface helpful diagnostics.
 
 
 class NCUProfiler:
@@ -110,26 +110,26 @@ class NCUProfiler:
         }
         
     def check_gpu_compatibility(self) -> Tuple[bool, str]:
-        """检查 GPU 是否支持 NCU"""
+        """Check whether the current GPU supports Nsight Compute."""
         try:
-            # 获取 GPU 信息
+            # Query GPU information
             result = subprocess.run(['nvidia-smi', '--query-gpu=name,compute_cap', '--format=csv,noheader'],
                                   capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
-                return False, "无法获取 GPU 信息"
+                return False, "Unable to query GPU information"
             
-            gpu_info = result.stdout.strip().split('\n')[0]  # 取第一个 GPU
+            gpu_info = result.stdout.strip().split('\n')[0]  # Use the first GPU
             gpu_name, compute_cap = [x.strip() for x in gpu_info.split(',')]
             compute_cap_major = int(float(compute_cap))
             
-            # NCU 支持 compute capability 7.0 及以上 (Volta 架构及以上)
+            # Nsight Compute requires compute capability 7.0 or higher (Volta and newer).
             if compute_cap_major < 7:
-                return False, f"GPU {gpu_name} (计算能力 {compute_cap}) 不支持 NCU。NCU 需要计算能力 7.0+ (Volta 架构及以上)"
+                return False, f"GPU {gpu_name} (compute capability {compute_cap}) cannot run NCU. Nsight Compute requires compute capability 7.0+ (Volta or newer)."
             
-            return True, f"GPU {gpu_name} (计算能力 {compute_cap}) 支持 NCU"
+            return True, f"GPU {gpu_name} (compute capability {compute_cap}) supports NCU"
             
         except Exception as e:
-            return False, f"GPU 兼容性检查失败: {e}"
+            return False, f"Failed to check GPU compatibility: {e}"
         
     def check_ncu_permissions(self) -> bool:
         """Check if NCU can run without sudo."""
@@ -498,7 +498,7 @@ echo "To view in GUI: ncu --import <profile_file>"
 
 
 def main():
-    # 早期检查 PyTorch 可用性
+    # Early exit if PyTorch is unavailable so we can provide guidance.
     if not TORCH_AVAILABLE:
         print("\n" + "="*60)
         print("PYTORCH IMPORT ERROR")
@@ -539,11 +539,10 @@ def main():
     parser.add_argument('--sudo', action='store_true',
                        help='Use sudo for NCU (needed for some systems)')
     
-    # 添加与 README 文档一致的参数
     parser.add_argument('--operator', default='matmul',
-                       help='要分析的算子类型 (默认: matmul)')
+                       help='Operator type to analyze (default: matmul)')
     parser.add_argument('--test-case', default=None,
-                       help='测试用例名称 (用于兼容性，实际使用 --sizes)')
+                       help='Legacy test case name (prefer --sizes)')
     
     args = parser.parse_args()
     
@@ -556,25 +555,25 @@ def main():
             m, n, k = map(int, match.groups())
             # Override sizes with the parsed dimensions
             args.sizes = [m]  # Use the first dimension as the size
-            print(f"从测试用例 '{args.test_case}' 解析出矩阵大小: {m}x{n}x{k}")
+            print(f"Parsed matrix dims from test case '{args.test_case}': {m}x{n}x{k}")
         else:
-            print(f"[WARN] 无法从测试用例 '{args.test_case}' 解析矩阵大小，使用默认值")
+            print(f"[WARN] Unable to parse matrix dims from test case '{args.test_case}', using defaults")
     
     # Create matrix sizes (assuming square matrices for simplicity)
     matrix_sizes = [(size, size, size) for size in args.sizes]
     
     # Print configuration summary
-    print("NCU Profiler 配置:")
+    print("NCU Profiler configuration:")
     print("=" * 40)
-    print(f"算子类型: {args.operator}")
+    print(f"Operator: {args.operator}")
     if args.test_case:
-        print(f"测试用例: {args.test_case}")
-    print(f"矩阵大小: {args.sizes}")
+        print(f"Test case: {args.test_case}")
+    print(f"Matrix sizes: {args.sizes}")
     print(f"Kernels: {args.kernels}")
     print(f"Metrics: {args.metrics}")
-    print(f"迭代次数: {args.iterations}")
+    print(f"Iterations: {args.iterations}")
     if args.output:
-        print(f"输出目录: {args.output}")
+        print(f"Output directory: {args.output}")
     print()
     
     # Initialize profiler
@@ -582,11 +581,11 @@ def main():
     
     # Check GPU compatibility
     gpu_compatible, gpu_msg = profiler.check_gpu_compatibility()
-    print(f"GPU 兼容性: {gpu_msg}")
+    print(f"GPU compatibility: {gpu_msg}")
     
     if not gpu_compatible:
-        print("\\n[WARN] 当前 GPU 不支持 Nsight Compute!")
-        print("自动切换到 PyTorch Profiler...")
+        print("\n[WARN] Current GPU does not support Nsight Compute!")
+        print("Switching to PyTorch Profiler...")
         
         # Import and use PyTorch profiler as fallback
         try:
@@ -599,8 +598,8 @@ def main():
             # Import the PyTorch profiler function
             from profiling_pytorch import run_pytorch_profiler_analysis
             
-            print(f"\\n[INFO] 使用 PyTorch Profiler 进行性能分析...")
-            print(f"矩阵尺寸: {args.sizes}")
+            print(f"\n[INFO] Running PyTorch Profiler for performance analysis...")
+            print(f"Matrix sizes: {args.sizes}")
             
             # Create output directory
             output_dir = Path(args.output) if args.output else Path(f"pytorch_profiling_{time.strftime('%Y%m%d_%H%M%S')}")
@@ -608,20 +607,20 @@ def main():
             # Run PyTorch profiler with similar parameters
             run_pytorch_profiler_analysis(args.sizes, output_dir)
             
-            print("\\n[PASS] PyTorch Profiler 分析完成!")
-            print(f"结果保存在: {output_dir}/")
+            print("\n[PASS] PyTorch Profiler analysis complete!")
+            print(f"Results saved to: {output_dir}/")
             return 0
                 
         except ImportError as e:
-            print(f"\\n[FAIL] PyTorch Profiler 导入失败: {e}")
-            print("建议使用替代方案:")
-            print("  - 手动运行: python tools/profiling_pytorch.py")
-            print("  - 或使用较新的 GPU (计算能力 7.0+)")
+            print(f"\n[FAIL] Failed to import PyTorch Profiler: {e}")
+            print("Suggested alternatives:")
+            print("  - Run manually: python tools/profiling_pytorch.py")
+            print("  - Upgrade to a GPU with compute capability 7.0+")
             return 1
         except Exception as e:
-            print(f"\\n[FAIL] PyTorch Profiler 运行失败: {e}")
-            print("建议使用替代方案:")
-            print("  - 手动运行: python tools/profiling_pytorch.py")
+            print(f"\n[FAIL] PyTorch Profiler execution failed: {e}")
+            print("Suggested alternatives:")
+            print("  - Run manually: python tools/profiling_pytorch.py")
             return 1
     
     # Check permissions
