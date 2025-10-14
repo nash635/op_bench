@@ -22,6 +22,7 @@ class OperatorType(Enum):
     ACTIVATION = "activation"
     REDUCTION = "reduction"
     ELEMENT_WISE = "element_wise"
+    HISTOGRAM = "histogram"
     RDMA_STRESS = "rdma_stress"
     TCP_BANDWIDTH = "tcp_bandwidth"
     RDMA_BANDWIDTH = "rdma_bandwidth"

@@ -1,11 +1,15 @@
 from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
-import os
 
 # 源文件列表
-sources = [
+matmul_sources = [
     'src/cuda/matmul_cuda_ext.cpp',
     'src/cuda/matmul_kernels.cu',
+]
+
+histogram_sources = [
+    'src/cuda/histogram_cuda_ext.cpp',
+    'src/cuda/histogram_kernels.cu',
 ]
 
 # 编译参数
@@ -20,7 +24,16 @@ setup(
     ext_modules=[
         CUDAExtension(
             name='matmul_cuda_ext',
-            sources=sources,
+            sources=matmul_sources,
+            include_dirs=include_dirs,
+            extra_compile_args={
+                'cxx': extra_compile_args_cxx,
+                'nvcc': extra_compile_args_nvcc
+            }
+        ),
+        CUDAExtension(
+            name='histogram_cuda_ext',
+            sources=histogram_sources,
             include_dirs=include_dirs,
             extra_compile_args={
                 'cxx': extra_compile_args_cxx,
