@@ -1,7 +1,7 @@
 from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
-# 源文件列表
+# Source files for CUDA extensions
 matmul_sources = [
     'src/cuda/matmul_cuda_ext.cpp',
     'src/cuda/matmul_kernels.cu',
@@ -12,11 +12,11 @@ histogram_sources = [
     'src/cuda/histogram_kernels.cu',
 ]
 
-# 编译参数
+# Compilation arguments
 extra_compile_args_cxx = ['-std=c++17', '-O3']
 extra_compile_args_nvcc = ['-std=c++17', '-O3', '--expt-relaxed-constexpr']
 
-# 包含路径
+# Additional include directories
 include_dirs = []
 
 setup(

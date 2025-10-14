@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.join(project_root, 'src'))  # For framework and opera
 
 @dataclass
 class NetworkDevice:
-    """网络设备信息"""
+    """Metadata describing a network device."""
     name: str
     type: str  # 'ethernet', 'infiniband', 'roce'
     speed: str  # e.g., '400000' for 400Gbps
@@ -37,7 +37,7 @@ class NetworkDevice:
 
 @dataclass
 class RDMADevice:
-    """RDMA设备信息"""
+    """Metadata describing an RDMA-capable device."""
     name: str
     node_guid: str
     sys_image_guid: str

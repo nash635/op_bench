@@ -126,7 +126,7 @@ class BaseOperator(ABC):
     def get_reference_implementation(self) -> str:
         """Get the reference implementation ID"""
         if self.reference_impl is None:
-            # 如果没有设置reference，返回第一个可用的实现
+            # Default to the first available implementation when no reference is set.
             if self.implementations:
                 return list(self.implementations.keys())[0]
             else:

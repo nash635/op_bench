@@ -5,14 +5,14 @@
 
 namespace {
 
-// 优化版本1: 使用私有化技术减少共享内存竞争
+// Optimization variant 1: use privatization to reduce shared memory contention
 __global__ void histogram_kernel_optimized(const int* __restrict__ input,
                                            int* __restrict__ histogram,
                                            int N,
                                            int num_bins) {
     extern __shared__ int shared_hist[];
 
-    // 零初始化共享内存
+    // Zero-initialize shared memory
     for (int idx = threadIdx.x; idx < num_bins; idx += blockDim.x) {
         shared_hist[idx] = 0;
     }
@@ -21,16 +21,16 @@ __global__ void histogram_kernel_optimized(const int* __restrict__ input,
     const int global_thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     const int stride = blockDim.x * gridDim.x;
 
-    // 策略1: 对于小的 num_bins，使用私有化
+    // Strategy 1: privatization for small num_bins
     if (num_bins <= 256) {
-        // 每个线程维护一个私有 histogram
+        // Each thread maintains a private histogram
         int private_hist[256];
         #pragma unroll
         for (int i = 0; i < num_bins; i++) {
             private_hist[i] = 0;
         }
 
-        // 在私有 histogram 中累加
+    // Accumulate within the private histogram
         for (int i = global_thread_id; i < N; i += stride) {
             int bin = input[i];
             if (bin >= 0 && bin < num_bins) {
@@ -38,14 +38,14 @@ __global__ void histogram_kernel_optimized(const int* __restrict__ input,
             }
         }
 
-        // 将私有 histogram 合并到共享内存
+    // Merge private histograms into shared memory
         for (int i = 0; i < num_bins; i++) {
             if (private_hist[i] > 0) {
                 atomicAdd(&shared_hist[i], private_hist[i]);
             }
         }
     } else {
-        // 策略2: 对于大的 num_bins，直接使用共享内存原子操作
+    // Strategy 2: use shared-memory atomics for large num_bins
         for (int i = global_thread_id; i < N; i += stride) {
             int bin = input[i];
             if (bin >= 0 && bin < num_bins) {
@@ -56,7 +56,7 @@ __global__ void histogram_kernel_optimized(const int* __restrict__ input,
 
     __syncthreads();
 
-    // 批量写回全局内存
+    // Flush aggregated counts to global memory
     for (int idx = threadIdx.x; idx < num_bins; idx += blockDim.x) {
         int count = shared_hist[idx];
         if (count != 0) {
@@ -65,14 +65,14 @@ __global__ void histogram_kernel_optimized(const int* __restrict__ input,
     }
 }
 
-// 优化版本2: 专门针对小 bin 数量的优化（使用 warp-level 操作）
+// Optimization variant 2: tuned for small bin counts (leveraging warp-level behavior)
 __global__ void histogram_kernel_small_bins(const int* __restrict__ input,
                                             int* __restrict__ histogram,
                                             int N,
                                             int num_bins) {
     extern __shared__ int shared_hist[];
 
-    // 使用所有线程快速初始化
+    // Initialize the shared histogram with all threads
     for (int idx = threadIdx.x; idx < num_bins; idx += blockDim.x) {
         shared_hist[idx] = 0;
     }
@@ -81,10 +81,10 @@ __global__ void histogram_kernel_small_bins(const int* __restrict__ input,
     const int global_thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     const int stride = blockDim.x * gridDim.x;
 
-    // 使用寄存器数组（编译时大小已知时更高效）
-    int private_hist[64] = {0}; // 假设 num_bins <= 64
+    // Use a register array when the size is known at compile time
+    int private_hist[64] = {0}; // Assumes num_bins <= 64
 
-    // 在私有空间累加
+    // Accumulate in thread-local storage
     for (int i = global_thread_id; i < N; i += stride) {
         int bin = input[i];
         if (bin >= 0 && bin < num_bins) {
@@ -92,7 +92,7 @@ __global__ void histogram_kernel_small_bins(const int* __restrict__ input,
         }
     }
 
-    // 合并到共享内存
+    // Merge into shared memory
     #pragma unroll
     for (int i = 0; i < 64 && i < num_bins; i++) {
         if (private_hist[i] > 0) {
@@ -102,7 +102,7 @@ __global__ void histogram_kernel_small_bins(const int* __restrict__ input,
 
     __syncthreads();
 
-    // 写回全局内存
+    // Write results back to global memory
     for (int idx = threadIdx.x; idx < num_bins; idx += blockDim.x) {
         if (shared_hist[idx] != 0) {
             atomicAdd(&histogram[idx], shared_hist[idx]);
@@ -110,7 +110,7 @@ __global__ void histogram_kernel_small_bins(const int* __restrict__ input,
     }
 }
 
-// 优化版本3: 针对大 bin 数量的分段处理
+// Optimization variant 3: segmented processing for large bin counts
 __global__ void histogram_kernel_large_bins(const int* __restrict__ input,
                                             int* __restrict__ histogram,
                                             int N,
@@ -125,7 +125,7 @@ __global__ void histogram_kernel_large_bins(const int* __restrict__ input,
     const int global_thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     const int stride = blockDim.x * gridDim.x;
 
-    // 直接使用共享内存，减少寄存器压力
+    // Use shared memory directly to reduce register pressure
     for (int i = global_thread_id; i < N; i += stride) {
         int bin = input[i];
         if (bin >= 0 && bin < num_bins) {
@@ -135,7 +135,7 @@ __global__ void histogram_kernel_large_bins(const int* __restrict__ input,
 
     __syncthreads();
 
-    // 批量写回，使用向量化加载提高效率
+    // Flush in batches using vectorized loads
     for (int idx = threadIdx.x; idx < num_bins; idx += blockDim.x) {
         int count = shared_hist[idx];
         if (count != 0) {
@@ -161,12 +161,12 @@ extern "C" void solve(const int* input, int* histogram, int N, int num_bins) {
         return;
     }
 
-    // 动态选择最优的 kernel 和配置
+    // Dynamically choose the best kernel configuration
     int threads_per_block;
     int blocks;
     size_t shared_mem_bytes = static_cast<size_t>(num_bins) * sizeof(int);
 
-    // 查询设备共享内存限制
+    // Query device shared-memory limits
     cudaDeviceProp prop;
     cudaGetDeviceProperties(&prop, 0);
     
@@ -176,21 +176,21 @@ extern "C" void solve(const int* input, int* histogram, int N, int num_bins) {
     }
 
     if (num_bins <= 64) {
-        // 小 bin 数量：使用更多线程，私有化策略
+        // Small bin counts: more threads with privatization
         threads_per_block = 256;
         blocks = std::min((N + threads_per_block - 1) / threads_per_block, 
                          std::min(prop.multiProcessorCount * 4, 65535));
         histogram_kernel_small_bins<<<blocks, threads_per_block, shared_mem_bytes>>>(
             input, histogram, N, num_bins);
     } else if (num_bins <= 256) {
-        // 中等 bin 数量：使用优化的私有化策略
+        // Medium bin counts: optimized privatization strategy
         threads_per_block = 256;
         blocks = std::min((N + threads_per_block - 1) / threads_per_block,
                          std::min(prop.multiProcessorCount * 2, 65535));
         histogram_kernel_optimized<<<blocks, threads_per_block, shared_mem_bytes>>>(
             input, histogram, N, num_bins);
     } else {
-        // 大 bin 数量：减少线程块数量，避免过多全局原子操作竞争
+        // Large bin counts: limit blocks to reduce global atomic contention
         threads_per_block = 256;
         blocks = std::min((N + threads_per_block - 1) / threads_per_block,
                          std::min(prop.multiProcessorCount, 1024));
